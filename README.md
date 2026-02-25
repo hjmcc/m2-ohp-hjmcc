@@ -1,6 +1,6 @@
 # m2-ohp-hjmcc
 
-OHP M2 student observing project.
+HJMCC scripts related to OHP observing 
 
 ## Contents
 
