@@ -17,6 +17,7 @@ import html as html_mod
 import json
 import os
 import re
+import shutil
 import time
 import urllib.parse
 import urllib.request
@@ -34,6 +35,7 @@ CSV_PATH = OUTPUT_DIR / "ohp_archive.csv"
 JSON_PATH = OUTPUT_DIR / "ohp_archive.json"
 HTML_PATH = OUTPUT_DIR / "archive_summary.html"
 WEB_HTML_PATH = OUTPUT_DIR / "ohp-m2-archive.html"
+DOCS_DIR = OUTPUT_DIR.parent / "docs"
 WEB_BASE_URL = "https://ohp.ias.universite-paris-saclay.fr/archive/"
 SIMBAD_CACHE = OUTPUT_DIR / "simbad_cache.json"
 
@@ -1323,15 +1325,21 @@ def main():
     # 5. Generate HTML (local version)
     generate_html(data)
 
-    # 6. Generate web HTML (relative URLs for server deployment)
+    # 6. Generate web HTML (absolute URLs for external hosting)
     web_data = copy.deepcopy(data)
     web_data["archive_root"] = WEB_BASE_URL
     archive_prefix = str(ARCHIVE_ROOT) + "/"
     for obj, files in web_data.get("file_index", {}).items():
         for f in files:
             if f["path"].startswith(archive_prefix):
-                f["path"] = f["path"][len(archive_prefix):]
+                f["path"] = WEB_BASE_URL + f["path"][len(archive_prefix):]
     generate_html(web_data, web_mode=True)
+
+    # 7. Copy web HTML to docs/ for GitHub Pages
+    DOCS_DIR.mkdir(exist_ok=True)
+    docs_index = DOCS_DIR / "index.html"
+    shutil.copy2(WEB_HTML_PATH, docs_index)
+    print(f"Copied → {docs_index}")
 
     elapsed = time.time() - t_start
     print(f"\nDone in {elapsed:.1f}s — {len(records):,} files processed")
@@ -1339,6 +1347,7 @@ def main():
     print(f"  JSON: {JSON_PATH}")
     print(f"  HTML: {HTML_PATH}")
     print(f"  Web:  {WEB_HTML_PATH}")
+    print(f"  Docs: {docs_index}")
 
 
 if __name__ == "__main__":
