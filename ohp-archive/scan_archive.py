@@ -1,0 +1,1345 @@
+#!/usr/bin/env python3
+"""scan_archive.py — OHP M2 Archive Scanner
+
+Scans FITS files across 8 years of OHP student observing data (2018-2025),
+builds a CSV database, aggregated JSON, and self-contained HTML summary.
+
+Pure stdlib Python — reads FITS headers as raw 80-byte ASCII cards.
+No astropy or other dependencies required.
+
+Usage:
+    python3 scan_archive.py
+"""
+
+import copy
+import csv
+import html as html_mod
+import json
+import os
+import re
+import time
+import urllib.parse
+import urllib.request
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ARCHIVE_ROOT = Path("/Users/hjmcc/Archive/ohp")
+OUTPUT_DIR = Path(__file__).resolve().parent
+CSV_PATH = OUTPUT_DIR / "ohp_archive.csv"
+JSON_PATH = OUTPUT_DIR / "ohp_archive.json"
+HTML_PATH = OUTPUT_DIR / "archive_summary.html"
+WEB_HTML_PATH = OUTPUT_DIR / "ohp-m2-archive.html"
+WEB_BASE_URL = "https://ohp.ias.universite-paris-saclay.fr/archive/"
+SIMBAD_CACHE = OUTPUT_DIR / "simbad_cache.json"
+
+FITS_EXT = {".fits", ".fit"}
+MAX_HEADER_BYTES = 14400  # 5 × 2880-byte FITS blocks
+
+TELESCOPES = {
+    "T120": {
+        "name": "1.2m Newton",
+        "instrument": "Andor Tech CCD",
+        "type": "Imaging",
+        "desc": "1.2m f/6 Newton reflector with Andor 1k×1k CCD (2×2 bin)",
+    },
+    "T080": {
+        "name": "80cm Cassegrain",
+        "instrument": "SBIG STXL-6303",
+        "type": "Imaging",
+        "desc": "80cm f/15 Cassegrain with SBIG STXL-6303 CCD (2×2 bin)",
+    },
+    "IRIS": {
+        "name": "50cm robotic (IRIS)",
+        "instrument": "FLI ProLine",
+        "type": "Imaging",
+        "desc": "50cm f/8.14 robotic telescope with FLI ProLine 2k×2k CCD",
+    },
+    "T152": {
+        "name": "1.52m Coudé",
+        "instrument": "Andor DU940P_BV",
+        "type": "Spectroscopy",
+        "desc": "1.52m coudé spectrograph with Andor DU940P_BV echelle detector",
+    },
+}
+
+CSV_COLUMNS = [
+    "file_path", "filename", "year", "run_label", "telescope",
+    "date_obs", "object_raw", "object_clean", "imagetyp_raw", "imagetyp",
+    "filter_raw", "filter_canonical", "exptime", "ra", "dec", "airmass",
+    "naxis1", "naxis2", "xbinning", "ybinning", "ccd_temp",
+    "observer", "instrume",
+    "simbad_name", "simbad_ra", "simbad_dec", "simbad_type",
+    "error",
+]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Filter normalization
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_FILTER_RULES = [
+    # Cousins/Johnson broadband
+    (["R", "R_Cousins", "r_Cousins", "Rc", "RC", "Rouge", "rouge", "Red",
+      "R Cousins"], "R"),
+    (["V", "V_Johnson", "V_Cousins", "V_cousins", "V Cousins", "v_Gunn",
+      "Vert", "vert", "Green"], "V"),
+    (["B", "B_Johnson", "B_Cousins", "B_cousins", "B Cousins",
+      "Bleu", "bleu", "Blue"], "B"),
+    (["I", "Ic", "IC", "I_Cousins"], "I"),
+    (["U", "U'_Cousins", "U''_Cousins"], "U"),
+    # Sloan primed (unqualified single-char handled below)
+    (["g", "G", "g'", "g''", "g_Gunn"], "g"),
+    (["r", "r'", "r''", "r_Gunn"], "r"),
+    (["i'", "i''", "i_Gunn", "i Gunn"], "i"),
+    (["z'", "z''", "z_Gunn"], "z"),
+    (["u'", "u''", "u_Gunn"], "u"),
+    # SDSS explicit prefix
+    (["SDSS g", "SDSS_g"], "SDSS_g"),
+    (["SDSS r", "SDSS_r"], "SDSS_r"),
+    (["SDSS i", "SDSS_i"], "SDSS_i"),
+    (["SDSS z", "SDSS_z"], "SDSS_z"),
+    (["SDSS u", "SDSS_u"], "SDSS_u"),
+    # Narrowband
+    (["H_alpha", "Halpha", "Ha", "H-alpha", "H_Alpha", "H alpha",
+      "Halpha_OHP", "H alpha OHP"], "Halpha"),
+    (["OIII", "O III", "[OIII]", "O_III", "OIII 5nm"], "OIII"),
+    (["SII", "[SII]", "S_II", "S II"], "SII"),
+    # Luminance / clear
+    (["L", "Luminance", "luminance", "Lum"], "L"),
+    (["CLEAR", "clear", "Clear", "C", "EMPTY"], "Clear"),
+    # Grism
+    (["Grism", "grism", "GRISM"], "Grism"),
+]
+
+FILTER_MAP = {}
+for _variants, _canonical in _FILTER_RULES:
+    for _v in _variants:
+        FILTER_MAP[_v] = _canonical
+
+# Simbad object-type codes -> human labels
+OTYPE_MAP = {
+    "G": "Galaxy", "GiG": "Galaxy", "GiC": "Galaxy", "GiP": "Galaxy",
+    "IG": "Interacting Galaxy", "PaG": "Galaxy Pair",
+    "ClG": "Galaxy Cluster", "GrG": "Galaxy Group", "SCG": "Supercluster",
+    "AGN": "AGN", "Sy1": "Seyfert 1", "Sy2": "Seyfert 2",
+    "QSO": "Quasar", "BLL": "BL Lac", "LIN": "LINER",
+    "*": "Star", "**": "Double Star", "V*": "Variable Star",
+    "PM*": "High-PM Star", "HV*": "High-Vel Star",
+    "SB*": "Spectroscopic Binary", "EB*": "Eclipsing Binary",
+    "Ce*": "Cepheid", "RR*": "RR Lyrae", "LP*": "Long-Period Var",
+    "WR*": "Wolf-Rayet", "Be*": "Be Star", "em*": "Emission-line Star",
+    "Pe*": "Peculiar Star", "HB*": "Horiz-Branch Star",
+    "RGB*": "Red Giant", "AGB*": "AGB Star", "C*": "Carbon Star",
+    "WD*": "White Dwarf", "BD*": "Brown Dwarf", "TT*": "T Tauri",
+    "Or*": "Orion Variable", "Ae*": "Herbig Ae/Be",
+    "PN": "Planetary Nebula", "SNR": "SNR", "HII": "HII Region",
+    "OpC": "Open Cluster", "GlC": "Globular Cluster", "Cl*": "Cluster",
+    "As*": "Association", "Neb": "Nebula", "RNe": "Refl. Nebula",
+    "GNe": "Nebula", "DNe": "Dark Nebula", "MoC": "Mol. Cloud",
+    "Pl": "Planet", "Cme": "Comet",
+}
+
+
+def otype_label(code):
+    """Convert Simbad otype short code to human-readable label."""
+    if not code:
+        return ""
+    return OTYPE_MAP.get(code.strip(), code.strip())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FITS header parsing
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def parse_fits_header(filepath):
+    """Read FITS header as raw 80-byte ASCII cards. Returns dict of keyword->value."""
+    headers = {}
+    try:
+        with open(filepath, "rb") as f:
+            raw = f.read(MAX_HEADER_BYTES)
+    except Exception as e:
+        return {"_error": str(e)}
+
+    for i in range(0, len(raw), 80):
+        card = raw[i : i + 80]
+        if len(card) < 80:
+            break
+        try:
+            line = card.decode("ascii", errors="replace")
+        except Exception:
+            continue
+
+        # END card terminates header
+        if line[:3] == "END" and line[3:].strip() == "":
+            break
+
+        key = line[:8].strip()
+        if not key or key in ("HISTORY", "COMMENT"):
+            continue
+
+        # Value indicator: '= ' at columns 9-10 (standard) or '=' at column 9
+        if line[8:10] == "= ":
+            value_part = line[10:]
+        elif len(line) > 8 and line[8] == "=":
+            value_part = line[9:]
+        else:
+            continue
+
+        value_part = value_part.strip()
+
+        # String value (single-quoted)
+        if value_part.startswith("'"):
+            end = 1
+            while end < len(value_part):
+                if value_part[end] == "'":
+                    if end + 1 < len(value_part) and value_part[end + 1] == "'":
+                        end += 2  # escaped quote
+                    else:
+                        break
+                else:
+                    end += 1
+            val = value_part[1:end].strip()
+        else:
+            # Numeric / logical — take everything before inline comment
+            val = value_part.split("/")[0].strip()
+
+        headers[key] = val
+
+    return headers
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Telescope identification
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def identify_telescope(filepath_str, headers):
+    """Identify telescope from directory path; fallback to INSTRUME header."""
+    fp = filepath_str.upper()
+    if "/T120/" in fp or "/OHP_T120_" in fp:
+        return "T120"
+    if "/T080/" in fp or "/OHP_T080_" in fp:
+        return "T080"
+    if "/IRIS/" in fp:
+        return "IRIS"
+    if "/T152/" in fp or "/OHP_T152_" in fp:
+        return "T152"
+
+    # Fallback to header keywords
+    instrume = headers.get("INSTRUME", "").lower()
+    head = headers.get("HEAD", "").upper()
+    if "du940" in instrume or "DU940" in head:
+        return "T152"
+    if "andor" in instrume:
+        return "T120"
+    if "sbig" in instrume or "stxl" in instrume:
+        return "T080"
+    if "fli" in instrume or "proline" in instrume or "flipro" in instrume:
+        return "IRIS"
+    return "unknown"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Normalization helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def classify_t152(filename):
+    """Classify T152 file type from filename prefix."""
+    fn = os.path.basename(filename).lower()
+    if fn.startswith(("ff", "ff_", "flat", "flatfield", "thungstene", "tungsten")):
+        return "flat"
+    if fn.startswith(("bias", "biais", "offset")):
+        return "bias"
+    if fn.startswith(("thar", "th-ar", "th_ar", "cl_", "cl ", "cathode")):
+        return "arc"
+    if fn.startswith("dark"):
+        return "dark"
+    return "science"
+
+
+def _is_flat_from_context(filename, obj_name):
+    """Detect flat frames that have IMAGETYP='Light Frame' but are actually flats."""
+    fn = filename.lower()
+    obj = obj_name.lower().strip() if obj_name else ""
+    # Filename-based detection
+    if any(fn.startswith(p) for p in ("flatdome", "flatsky", "domeflat", "skyflat", "flat_", "flat-")):
+        return True
+    # OBJECT-based: any token is "flat" (catches "flat Halpha", "T080_flat", etc.)
+    if obj and "flat" in re.split(r"[\s_\-]+", obj):
+        return True
+    return False
+
+
+def normalize_imagetyp(raw, filename="", telescope="", obj_name=""):
+    """Normalize IMAGETYP to: science, flat, bias, dark, arc."""
+    if telescope == "T152":
+        return classify_t152(filename)
+
+    fn = filename.lower()
+
+    # Override: detect flats masquerading as Light Frame
+    if _is_flat_from_context(filename, obj_name):
+        return "flat"
+
+    if not raw:
+        if any(fn.startswith(p) for p in ("bias", "biais", "offset")):
+            return "bias"
+        if any(fn.startswith(p) for p in ("flat", "ff")):
+            return "flat"
+        if fn.startswith("dark"):
+            return "dark"
+        return "science"
+    r = raw.lower().strip()
+    if r in ("light frame", "light", "object"):
+        return "science"
+    if r in ("flat field", "flat", "flatfield"):
+        return "flat"
+    if r in ("bias frame", "bias"):
+        return "bias"
+    if r in ("dark frame", "dark"):
+        return "dark"
+    return raw
+
+
+def normalize_filter(raw):
+    """Normalize filter name to canonical form."""
+    if not raw:
+        return ""
+    raw = raw.strip()
+    # Direct match
+    if raw in FILTER_MAP:
+        return FILTER_MAP[raw]
+    # Case-insensitive fallback
+    raw_lower = raw.lower()
+    for key, val in FILTER_MAP.items():
+        if raw_lower == key.lower():
+            return val
+    return raw
+
+
+def clean_object_name(raw):
+    """Clean object name: strip whitespace, normalize underscores to spaces."""
+    if not raw:
+        return ""
+    name = raw.strip()
+    name = name.replace("_", " ")
+    name = re.sub(r"\s+", " ", name)
+    return name
+
+
+def extract_t152_object(filename):
+    """Extract target name from T152 filename.
+
+    2021: HD51530_Mon Mar  1 2021_20.28.40_00022.fits -> HD51530
+    2022: HD127614_1200_00039.fits -> HD127614
+    """
+    fn = os.path.splitext(os.path.basename(filename))[0]
+    parts = fn.split("_")
+    if parts:
+        return parts[0]
+    return ""
+
+
+def extract_iris_object(filename):
+    """Extract target from IRIS/ACP filename.
+
+    RAW-M_67-S001-R001-C001-SDSS_g.fits -> M 67
+    NGC_5846-S001-R001-C003-SDSS_r.fits -> NGC 5846
+    """
+    fn = os.path.splitext(os.path.basename(filename))[0]
+    # Strip RAW- prefix
+    if fn.upper().startswith("RAW-"):
+        fn = fn[4:]
+    # Match ACP pattern: TARGET-S###-R###-C###-FILTER
+    m = re.match(r"^(.+?)-S\d{3}-R\d{3}-C\d{3}", fn)
+    if m:
+        return m.group(1).replace("_", " ")
+    return ""
+
+
+def safe_float(val, default=""):
+    """Convert header value to float string; return default on failure."""
+    if not val:
+        return default
+    try:
+        return str(float(val))
+    except (ValueError, TypeError):
+        return default
+
+
+def extract_run_info(filepath):
+    """Extract (run_label, year) from filepath.
+
+    .../201801OHP_M2/DATA/... -> ('201801OHP_M2', '2018')
+    """
+    for part in Path(filepath).parts:
+        if re.match(r"^\d{6}OHP\d?_M2$", part):
+            return part, part[:4]
+    return "", ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# File scanner
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def scan_file(filepath):
+    """Scan a single FITS file and return a record dict."""
+    filepath_str = str(filepath)
+    filename = os.path.basename(filepath_str)
+    run_label, year = extract_run_info(filepath_str)
+
+    headers = parse_fits_header(filepath_str)
+    error = headers.pop("_error", "")
+
+    telescope = identify_telescope(filepath_str, headers)
+
+    # Date
+    if telescope == "T152":
+        date_obs = headers.get("DATE", "")
+    else:
+        date_obs = headers.get("DATE-OBS", headers.get("DATE", ""))
+
+    # Exposure time
+    if telescope == "T152":
+        exptime_raw = headers.get("EXPOSURE", "")
+    else:
+        exptime_raw = headers.get("EXPTIME", headers.get("EXPOSURE", ""))
+
+    # Object name (extract before imagetyp so we can use it for flat detection)
+    obj_raw_header = headers.get("OBJECT", "")
+    if telescope == "T152":
+        # T152 has no OBJECT header; extract from filename
+        obj_raw = extract_t152_object(filename)
+    elif telescope == "IRIS" and not obj_raw_header.strip():
+        obj_raw = extract_iris_object(filename)
+    else:
+        obj_raw = obj_raw_header
+    object_clean = clean_object_name(obj_raw)
+
+    # Image type (uses obj_raw to detect misclassified flats)
+    imagetyp_raw = headers.get("IMAGETYP", "")
+    imagetyp = normalize_imagetyp(imagetyp_raw, filename, telescope, obj_name=obj_raw_header)
+
+    # For T152 non-science, clear the object name
+    if telescope == "T152" and imagetyp != "science":
+        obj_raw = ""
+        object_clean = ""
+    # For flats masquerading as science, clear the object name
+    if imagetyp == "flat" and imagetyp_raw.lower().strip() in ("light frame", "light", "object", ""):
+        object_clean = ""  # don't count "FlatDome" as a science target
+
+    # Filter
+    filter_raw = headers.get("FILTER", "")
+    filter_canonical = normalize_filter(filter_raw)
+
+    # RA / Dec
+    ra = headers.get("OBJCTRA", headers.get("RA", ""))
+    dec = headers.get("OBJCTDEC", headers.get("DEC", ""))
+
+    return {
+        "file_path": filepath_str,
+        "filename": filename,
+        "year": year,
+        "run_label": run_label,
+        "telescope": telescope,
+        "date_obs": date_obs,
+        "object_raw": obj_raw,
+        "object_clean": object_clean,
+        "imagetyp_raw": imagetyp_raw,
+        "imagetyp": imagetyp,
+        "filter_raw": filter_raw,
+        "filter_canonical": filter_canonical,
+        "exptime": safe_float(exptime_raw),
+        "ra": ra,
+        "dec": dec,
+        "airmass": safe_float(headers.get("AIRMASS", "")),
+        "naxis1": headers.get("NAXIS1", ""),
+        "naxis2": headers.get("NAXIS2", ""),
+        "xbinning": headers.get("XBINNING", ""),
+        "ybinning": headers.get("YBINNING", ""),
+        "ccd_temp": safe_float(headers.get("CCD-TEMP", headers.get("SET-TEMP", ""))),
+        "observer": headers.get("OBSERVER", ""),
+        "instrume": headers.get("INSTRUME", headers.get("HEAD", "")),
+        "simbad_name": "",
+        "simbad_ra": "",
+        "simbad_dec": "",
+        "simbad_type": "",
+        "error": error,
+    }
+
+
+def scan_archive():
+    """Walk the archive and scan all FITS files. Returns list of record dicts."""
+    fits_files = []
+
+    print(f"Scanning archive: {ARCHIVE_ROOT}")
+    for root, _dirs, files in os.walk(ARCHIVE_ROOT):
+        for f in files:
+            if os.path.splitext(f)[1].lower() in FITS_EXT:
+                fits_files.append(os.path.join(root, f))
+
+    total = len(fits_files)
+    print(f"Found {total} FITS files")
+
+    records = []
+    t0 = time.time()
+    for i, fp in enumerate(sorted(fits_files)):
+        if (i + 1) % 1000 == 0 or i == 0:
+            print(f"  Scanning {i + 1}/{total} ({time.time() - t0:.1f}s)...")
+        try:
+            records.append(scan_file(fp))
+        except Exception as e:
+            records.append({
+                "file_path": fp,
+                "filename": os.path.basename(fp),
+                "error": str(e),
+                **{k: "" for k in CSV_COLUMNS if k not in ("file_path", "filename", "error")},
+            })
+
+    elapsed = time.time() - t0
+    print(f"Scanned {total} files in {elapsed:.1f}s")
+    return records
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Simbad resolution
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def load_simbad_cache():
+    if SIMBAD_CACHE.exists():
+        with open(SIMBAD_CACHE) as f:
+            return json.load(f)
+    return {}
+
+
+def save_simbad_cache(cache):
+    with open(SIMBAD_CACHE, "w") as f:
+        json.dump(cache, f, indent=2, ensure_ascii=False)
+
+
+def query_simbad_tap(name):
+    """Query Simbad TAP for a single object name. Returns dict or None."""
+    escaped = name.replace("'", "''")
+    adql = (
+        f"SELECT TOP 1 main_id, ra, dec, otype "
+        f"FROM basic JOIN ident ON basic.oid = ident.oidref "
+        f"WHERE ident.id = '{escaped}'"
+    )
+    params = urllib.parse.urlencode({
+        "request": "doQuery",
+        "lang": "adql",
+        "format": "json",
+        "query": adql,
+    })
+    url = f"https://simbad.cds.unistra.fr/simbad/sim-tap/sync?{params}"
+
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "OHP-Scanner/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if "data" in data and data["data"]:
+            row = data["data"][0]
+            return {
+                "main_id": str(row[0] or ""),
+                "ra": round(row[1], 6) if row[1] is not None else "",
+                "dec": round(row[2], 6) if row[2] is not None else "",
+                "otype": str(row[3] or ""),
+            }
+    except Exception:
+        pass
+    return None
+
+
+def _simbad_variants(name):
+    """Generate plausible Simbad name variants for an object."""
+    variants = [name]
+
+    # Add/remove space after catalogue prefix:  NGC5846 -> NGC 5846,  NGC 5846 -> NGC5846
+    m = re.match(
+        r"^(NGC|IC|HD|HIP|HR|SAO|UGC|PGC|Abell|ACO|Mrk|Arp|VV|WASP|HAT-P|TOI|TYC)\s*[-]?\s*(\S+)$",
+        name, re.IGNORECASE,
+    )
+    if m:
+        prefix, num = m.group(1), m.group(2)
+        variants.append(f"{prefix} {num}")
+        variants.append(f"{prefix}{num}")
+        variants.append(f"{prefix}-{num}")
+
+    # Messier: M67 -> M 67, M 67 -> M67
+    m = re.match(r"^M\s*(\d+)$", name, re.IGNORECASE)
+    if m:
+        variants.append(f"M {m.group(1)}")
+        variants.append(f"M{m.group(1)}")
+
+    # ACO -> Abell
+    if name.upper().startswith("ACO"):
+        num = name[3:].strip().lstrip("-").strip()
+        variants.append(f"Abell {num}")
+        variants.append(f"ACO {num}")
+
+    # Hyphens <-> spaces
+    if "-" in name:
+        variants.append(name.replace("-", " "))
+    if " " in name:
+        variants.append(name.replace(" ", "-"))
+
+    # HAT-P targets
+    m = re.match(r"^HAT[\s-]*P[\s-]*(\d+)", name, re.IGNORECASE)
+    if m:
+        variants.append(f"HAT-P-{m.group(1)}")
+
+    # TOI targets
+    m = re.match(r"^TOI[\s-]*(\d+)", name, re.IGNORECASE)
+    if m:
+        variants.append(f"TOI-{m.group(1)}")
+
+    # Remove duplicate/original while preserving order
+    seen = set()
+    unique = []
+    for v in variants:
+        if v not in seen:
+            seen.add(v)
+            unique.append(v)
+    return unique
+
+
+def resolve_objects(records):
+    """Resolve unique science object names via Simbad TAP; update records in-place."""
+    cache = load_simbad_cache()
+
+    # Collect unique science objects
+    names = set()
+    for r in records:
+        if r["imagetyp"] == "science" and r["object_clean"]:
+            names.add(r["object_clean"])
+
+    to_query = [n for n in sorted(names) if n not in cache]
+    print(f"\nSimbad: {len(names)} unique targets, {len(names) - len(to_query)} cached, {len(to_query)} to query")
+
+    resolved = 0
+    failed = 0
+    for i, name in enumerate(to_query):
+        result = None
+        for variant in _simbad_variants(name):
+            result = query_simbad_tap(variant)
+            if result:
+                break
+            time.sleep(0.15)
+
+        if result:
+            cache[name] = result
+            resolved += 1
+        else:
+            cache[name] = None
+            failed += 1
+
+        if (i + 1) % 10 == 0:
+            print(f"  Queried {i + 1}/{len(to_query)} ({resolved} resolved, {failed} failed)")
+            save_simbad_cache(cache)
+
+        time.sleep(0.15)  # rate limit
+
+    save_simbad_cache(cache)
+    print(f"  Done: {resolved} resolved, {failed} unresolved")
+
+    # Apply to records
+    for r in records:
+        name = r["object_clean"]
+        info = cache.get(name)
+        if info:
+            r["simbad_name"] = info.get("main_id", "")
+            r["simbad_ra"] = str(info.get("ra", ""))
+            r["simbad_dec"] = str(info.get("dec", ""))
+            r["simbad_type"] = otype_label(info.get("otype", ""))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CSV output
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def write_csv(records):
+    with open(CSV_PATH, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        for r in records:
+            writer.writerow(r)
+    print(f"Wrote {len(records)} rows → {CSV_PATH}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# JSON aggregation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _aggregate_targets(recs):
+    """Aggregate science targets from a list of records."""
+    targets = defaultdict(lambda: {
+        "object": "", "simbad_name": "", "simbad_type": "",
+        "simbad_ra": "", "simbad_dec": "",
+        "telescopes": set(), "filters": set(),
+        "frames": 0, "total_exp": 0.0, "dates": set(),
+    })
+    for r in recs:
+        if r["imagetyp"] != "science" or not r["object_clean"]:
+            continue
+        obj = r["object_clean"]
+        t = targets[obj]
+        t["object"] = obj
+        t["simbad_name"] = r["simbad_name"] or t["simbad_name"]
+        t["simbad_type"] = r["simbad_type"] or t["simbad_type"]
+        t["simbad_ra"] = r["simbad_ra"] or t["simbad_ra"]
+        t["simbad_dec"] = r["simbad_dec"] or t["simbad_dec"]
+        t["telescopes"].add(r["telescope"])
+        if r["filter_canonical"]:
+            t["filters"].add(r["filter_canonical"])
+        t["frames"] += 1
+        try:
+            t["total_exp"] += float(r["exptime"]) if r["exptime"] else 0
+        except ValueError:
+            pass
+        if r["date_obs"]:
+            t["dates"].add(r["date_obs"][:10])
+    return targets
+
+
+def _targets_to_list(targets, include_coords=False):
+    """Convert targets dict to sorted JSON-safe list."""
+    result = []
+    for _obj, t in sorted(targets.items(), key=lambda x: -x[1]["total_exp"]):
+        entry = {
+            "object": t["object"],
+            "simbad_name": t["simbad_name"],
+            "simbad_type": t["simbad_type"],
+            "telescopes": sorted(t["telescopes"]),
+            "filters": sorted(t["filters"]),
+            "frames": t["frames"],
+            "total_exp": round(t["total_exp"], 1),
+            "dates": sorted(t["dates"]),
+        }
+        if include_coords:
+            entry["simbad_ra"] = t["simbad_ra"]
+            entry["simbad_dec"] = t["simbad_dec"]
+        result.append(entry)
+    return result
+
+
+def build_json(records):
+    """Build aggregated JSON for the HTML page."""
+    data = {
+        "generated": datetime.now().isoformat(timespec="seconds"),
+        "archive_root": str(ARCHIVE_ROOT),
+        "total_files": len(records),
+        "total_science": sum(1 for r in records if r["imagetyp"] == "science"),
+        "years": sorted(set(r["year"] for r in records if r["year"])),
+        "telescopes": {k: v for k, v in TELESCOPES.items()},
+        "per_year": {},
+        "master_targets": [],
+        "filter_summary": [],
+        "t152_log": [],
+    }
+
+    # ── Per-year ──
+    by_year = defaultdict(list)
+    for r in records:
+        if r["year"]:
+            by_year[r["year"]].append(r)
+
+    for year in sorted(by_year):
+        recs = by_year[year]
+        tel_counts = {}
+        for tel in ["T120", "T080", "IRIS", "T152"]:
+            tel_recs = [r for r in recs if r["telescope"] == tel]
+            if not tel_recs:
+                continue
+            counts = defaultdict(int)
+            for r in tel_recs:
+                counts[r["imagetyp"]] += 1
+            tel_counts[tel] = dict(counts)
+            tel_counts[tel]["total"] = len(tel_recs)
+
+        # Unknown telescope files
+        unk_recs = [r for r in recs if r["telescope"] not in TELESCOPES]
+        if unk_recs:
+            tel_counts["other"] = {"total": len(unk_recs)}
+
+        targets = _aggregate_targets(recs)
+        run_labels = sorted(set(r["run_label"] for r in recs if r["run_label"]))
+
+        data["per_year"][year] = {
+            "run_labels": run_labels,
+            "total_files": len(recs),
+            "telescope_counts": tel_counts,
+            "targets": _targets_to_list(targets),
+        }
+
+    # ── Master target catalogue ──
+    all_targets = _aggregate_targets(records)
+    # Add years to each target
+    for r in records:
+        if r["imagetyp"] == "science" and r["object_clean"] and r["year"]:
+            all_targets[r["object_clean"]].setdefault("years", set())
+            all_targets[r["object_clean"]]["years"].add(r["year"])
+    master = []
+    for _obj, t in sorted(all_targets.items(), key=lambda x: -x[1]["total_exp"]):
+        master.append({
+            "object": t["object"],
+            "simbad_name": t["simbad_name"],
+            "simbad_type": t["simbad_type"],
+            "simbad_ra": t["simbad_ra"],
+            "simbad_dec": t["simbad_dec"],
+            "telescopes": sorted(t["telescopes"]),
+            "filters": sorted(t["filters"]),
+            "frames": t["frames"],
+            "total_exp": round(t["total_exp"], 1),
+            "years": sorted(t.get("years", set())),
+            "dates": sorted(t["dates"]),
+        })
+    data["master_targets"] = master
+
+    # ── File index (per-object list of individual files) ──
+    file_index = defaultdict(list)
+    for r in records:
+        if r["imagetyp"] == "science" and r["object_clean"]:
+            file_index[r["object_clean"]].append({
+                "filename": r["filename"],
+                "date": r["date_obs"][:10] if r["date_obs"] else "",
+                "telescope": r["telescope"],
+                "filter": r["filter_canonical"],
+                "exptime": r["exptime"],
+                "path": r["file_path"],
+            })
+    # Sort each object's files by date then filename
+    for obj in file_index:
+        file_index[obj].sort(key=lambda f: (f["date"], f["filename"]))
+    data["file_index"] = dict(file_index)
+
+    # ── Filter summary ──
+    fstats = defaultdict(lambda: {"frames": 0, "total_exp": 0.0})
+    for r in records:
+        filt = r["filter_canonical"] or r["filter_raw"] or "(none)"
+        fstats[filt]["frames"] += 1
+        try:
+            fstats[filt]["total_exp"] += float(r["exptime"]) if r["exptime"] else 0
+        except ValueError:
+            pass
+    data["filter_summary"] = [
+        {"filter": f, "frames": s["frames"], "total_exp": round(s["total_exp"], 1)}
+        for f, s in sorted(fstats.items(), key=lambda x: -x[1]["frames"])
+    ]
+
+    # ── T152 spectroscopy log ──
+    t152 = [r for r in records if r["telescope"] == "T152" and r["imagetyp"] == "science"]
+    data["t152_log"] = [
+        {
+            "object": r["object_clean"],
+            "simbad_name": r["simbad_name"],
+            "date": r["date_obs"],
+            "exptime": r["exptime"],
+            "filename": r["filename"],
+        }
+        for r in sorted(t152, key=lambda r: r.get("date_obs", ""))
+    ]
+
+    return data
+
+
+def write_json(data):
+    with open(JSON_PATH, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    print(f"Wrote JSON → {JSON_PATH}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HTML generation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _esc(text):
+    """HTML-escape a string."""
+    return html_mod.escape(str(text)) if text else ""
+
+
+def _fmt_exp(seconds):
+    """Format exposure time for display."""
+    if not seconds:
+        return ""
+    try:
+        s = float(seconds)
+    except (ValueError, TypeError):
+        return str(seconds)
+    if s < 60:
+        return f"{s:.0f}s"
+    if s < 3600:
+        return f"{s / 60:.1f}min"
+    return f"{s / 3600:.1f}h"
+
+
+def generate_html(data, web_mode=False):
+    """Generate self-contained dark-themed HTML summary.
+
+    If web_mode is True, file paths in file_index are relative URLs and
+    the JS renders them as clickable download links.
+    """
+    h = _esc  # alias
+    out_path = WEB_HTML_PATH if web_mode else HTML_PATH
+    title = "OHP M2 Observing Archive" if web_mode else "OHP M2 Archive Summary"
+
+    lines = []
+    w = lines.append  # writer shorthand
+
+    # ── Document head ──
+    w("<!DOCTYPE html>")
+    w('<html lang="en">')
+    w("<head>")
+    w('<meta charset="UTF-8">')
+    w('<meta name="viewport" content="width=device-width, initial-scale=1.0">')
+    w(f"<title>{title}</title>")
+    w("<style>")
+    w(_CSS)
+    w("</style>")
+    w("</head>")
+    w("<body>")
+
+    # ── Header ──
+    w('<header class="page-header">')
+    w(f"<h1>{h(title)}</h1>")
+    w('<p class="subtitle">Observatoire de Haute-Provence &middot; Student Observing Campaigns 2018&ndash;2025</p>')
+    w("</header>")
+
+    # ── Dashboard cards ──
+    w('<section class="dashboard">')
+    years = data["years"]
+    tels_used = set()
+    for ydata in data["per_year"].values():
+        tels_used.update(ydata["telescope_counts"].keys())
+    tels_used.discard("other")
+    cards = [
+        (f"{data['total_files']:,}", "Total Files"),
+        (f"{data['total_science']:,}", "Science Frames"),
+        (str(len(years)), "Observation Years"),
+        (str(len(tels_used)), "Telescopes"),
+        (str(len(data['master_targets'])), "Unique Targets"),
+    ]
+    for val, label in cards:
+        w(f'<div class="card"><div class="card-val">{val}</div><div class="card-lbl">{h(label)}</div></div>')
+    w("</section>")
+
+    # ── Telescope legend ──
+    w('<section class="section">')
+    w("<h2>Telescopes</h2>")
+    w('<table class="tbl"><thead><tr><th>ID</th><th>Name</th><th>Instrument</th><th>Type</th><th>Description</th></tr></thead><tbody>')
+    for tid, tinfo in TELESCOPES.items():
+        w(f'<tr><td><strong>{h(tid)}</strong></td><td>{h(tinfo["name"])}</td>'
+          f'<td>{h(tinfo["instrument"])}</td><td>{h(tinfo["type"])}</td><td>{h(tinfo["desc"])}</td></tr>')
+    w("</tbody></table>")
+    w("</section>")
+
+    # ── Per-year controls ──
+    w('<section class="section">')
+    w('<div class="section-head"><h2>Per-Year Summary</h2>')
+    w('<span class="controls"><button onclick="toggleAll(true)">Expand All</button>'
+      '<button onclick="toggleAll(false)">Collapse All</button></span></div>')
+
+    for year in sorted(data["per_year"], reverse=True):
+        ydata = data["per_year"][year]
+        run_str = ", ".join(ydata["run_labels"]) if ydata["run_labels"] else year
+        w(f'<details class="year-details"><summary><strong>{h(year)}</strong> &mdash; {h(run_str)} '
+          f'({ydata["total_files"]:,} files)</summary>')
+        w('<div class="year-body">')
+
+        # Telescope breakdown table
+        w("<h3>Telescope Breakdown</h3>")
+        types = ["science", "flat", "bias", "dark", "arc"]
+        w('<table class="tbl"><thead><tr><th>Telescope</th>')
+        for t in types:
+            w(f"<th>{t.title()}</th>")
+        w("<th>Total</th></tr></thead><tbody>")
+        for tel, counts in sorted(ydata["telescope_counts"].items()):
+            if tel == "other":
+                continue
+            w(f"<tr><td><strong>{h(tel)}</strong></td>")
+            for t in types:
+                v = counts.get(t, 0)
+                w(f'<td>{v if v else "&mdash;"}</td>')
+            w(f'<td><strong>{counts.get("total", 0)}</strong></td></tr>')
+        w("</tbody></table>")
+
+        # Science targets table
+        targets = ydata["targets"]
+        if targets:
+            w("<h3>Science Targets</h3>")
+            w('<table class="tbl"><thead><tr>'
+              "<th>Object</th><th>Simbad Name</th><th>Type</th>"
+              "<th>Telescope</th><th>Filters</th><th>Frames</th>"
+              "<th>Total Exp</th><th>Dates</th></tr></thead><tbody>")
+            for t in targets:
+                obj_esc = html_mod.escape(t["object"], quote=True)
+                w(f'<tr><td><a href="#" class="obj-link" data-obj="{obj_esc}" onclick="showFiles(this);return false">{h(t["object"])}</a></td>'
+                  f'<td>{h(t["simbad_name"])}</td>'
+                  f'<td>{h(t["simbad_type"])}</td>'
+                  f'<td>{", ".join(t["telescopes"])}</td>'
+                  f'<td>{", ".join(t["filters"])}</td>'
+                  f'<td>{t["frames"]}</td>'
+                  f'<td>{_fmt_exp(t["total_exp"])}</td>'
+                  f'<td class="mono">{", ".join(t["dates"])}</td></tr>')
+            w("</tbody></table>")
+
+        w("</div></details>")
+
+    w("</section>")
+
+    # ── Master target catalogue ──
+    w('<section class="section">')
+    w("<h2>Master Target Catalogue</h2>")
+    w('<input type="text" id="master-search" class="search-box" '
+      'placeholder="Search targets..." oninput="filterMaster()">')
+    w('<table class="tbl sortable" id="master-table">')
+    w("<thead><tr>")
+    cols = ["Object", "Simbad Name", "Type", "RA", "Dec",
+            "Telescopes", "Filters", "Frames", "Total Exp", "Years"]
+    for i, col in enumerate(cols):
+        w(f'<th onclick="sortTable(\'master-table\',{i})" class="sortable-th">{col}</th>')
+    w("</tr></thead><tbody>")
+    for t in data["master_targets"]:
+        ra_str = f'{t["simbad_ra"]:.4f}' if isinstance(t.get("simbad_ra"), (int, float)) and t["simbad_ra"] != "" else h(t.get("simbad_ra", ""))
+        dec_str = f'{t["simbad_dec"]:.4f}' if isinstance(t.get("simbad_dec"), (int, float)) and t["simbad_dec"] != "" else h(t.get("simbad_dec", ""))
+        obj_esc = html_mod.escape(t["object"], quote=True)
+        w(f'<tr><td><a href="#" class="obj-link" data-obj="{obj_esc}" onclick="showFiles(this);return false">{h(t["object"])}</a></td>'
+          f'<td>{h(t["simbad_name"])}</td>'
+          f'<td>{h(t["simbad_type"])}</td>'
+          f'<td class="mono">{ra_str}</td>'
+          f'<td class="mono">{dec_str}</td>'
+          f'<td>{", ".join(t["telescopes"])}</td>'
+          f'<td>{", ".join(t["filters"])}</td>'
+          f'<td>{t["frames"]}</td>'
+          f'<td data-sort="{t["total_exp"]}">{_fmt_exp(t["total_exp"])}</td>'
+          f'<td>{", ".join(t.get("years", []))}</td></tr>')
+    w("</tbody></table>")
+    w("</section>")
+
+    # ── Filter usage summary ──
+    w('<section class="section">')
+    w("<h2>Filter Usage</h2>")
+    w('<table class="tbl"><thead><tr><th>Filter</th><th>Frames</th><th>Total Exposure</th></tr></thead><tbody>')
+    for f in data["filter_summary"]:
+        w(f'<tr><td><strong>{h(f["filter"])}</strong></td>'
+          f'<td>{f["frames"]:,}</td>'
+          f'<td>{_fmt_exp(f["total_exp"])}</td></tr>')
+    w("</tbody></table>")
+    w("</section>")
+
+    # ── T152 spectroscopy log ──
+    if data["t152_log"]:
+        w('<section class="section">')
+        w("<h2>T152 Spectroscopy Log</h2>")
+        w('<table class="tbl"><thead><tr><th>Object</th><th>Simbad Name</th>'
+          "<th>Date</th><th>Exposure</th><th>Filename</th></tr></thead><tbody>")
+        for r in data["t152_log"]:
+            w(f'<tr><td>{h(r["object"])}</td>'
+              f'<td>{h(r["simbad_name"])}</td>'
+              f'<td class="mono">{h(r["date"])}</td>'
+              f'<td>{_fmt_exp(r["exptime"])}</td>'
+              f'<td class="mono">{h(r["filename"])}</td></tr>')
+        w("</tbody></table>")
+        w("</section>")
+
+    # ── Footer ──
+    w("<footer>")
+    if web_mode:
+        w(f'<p>Generated: {h(data["generated"])} &middot; '
+          f'{data["total_files"]:,} files scanned</p>')
+    else:
+        w(f'<p>Archive: <code>{h(str(ARCHIVE_ROOT))}</code> &middot; '
+          f'Generated: {h(data["generated"])} &middot; '
+          f'{data["total_files"]:,} files scanned</p>')
+    w("</footer>")
+
+    # ── Embedded JSON + JavaScript ──
+    w("<script>")
+    w(f"const DATA = {json.dumps(data, ensure_ascii=False)};")
+    w(f"const WEB_MODE = {'true' if web_mode else 'false'};")
+    w(_JS)
+    w("</script>")
+
+    w("</body></html>")
+
+    html_str = "\n".join(lines)
+    with open(out_path, "w") as f:
+        f.write(html_str)
+    print(f"Wrote HTML → {out_path}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CSS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_CSS = """\
+:root {
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --text: #c9d1d9; --text-dim: #8b949e; --heading: #f0f6fc;
+  --accent: #58a6ff; --green: #3fb950; --orange: #d29922; --red: #f85149;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--font);
+  font-size: 14px; line-height: 1.6; max-width: 1400px;
+  margin: 0 auto; padding: 20px 24px 60px;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1, h2, h3 { color: var(--heading); font-weight: 600; }
+h1 { font-size: 1.8em; }
+h2 { font-size: 1.3em; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 1.05em; margin: 16px 0 8px; color: var(--text); }
+code { font-family: var(--mono); font-size: 0.92em; background: var(--surface); padding: 2px 6px; border-radius: 4px; }
+.mono { font-family: var(--mono); font-size: 0.88em; }
+
+/* Header */
+.page-header { text-align: center; margin-bottom: 32px; padding: 24px 0 16px; border-bottom: 1px solid var(--border); }
+.subtitle { color: var(--text-dim); margin-top: 4px; }
+
+/* Dashboard */
+.dashboard {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px; margin-bottom: 32px;
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 20px 16px; text-align: center;
+}
+.card-val { font-size: 2em; font-weight: 700; color: var(--accent); }
+.card-lbl { color: var(--text-dim); font-size: 0.85em; margin-top: 4px; }
+
+/* Sections */
+.section { margin-bottom: 32px; }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.controls button {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 0.85em;
+}
+.controls button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Tables */
+.tbl {
+  width: 100%; border-collapse: collapse; margin-bottom: 12px;
+  font-size: 0.9em;
+}
+.tbl th, .tbl td {
+  padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tbl td:last-child, .tbl th:last-child { white-space: normal; }
+.tbl thead th { background: var(--surface); color: var(--heading); font-weight: 600; position: sticky; top: 0; }
+.tbl tbody tr:hover { background: rgba(88,166,255,0.06); }
+.sortable-th { cursor: pointer; user-select: none; }
+.sortable-th:hover { color: var(--accent); }
+.sortable-th::after { content: ' \\2195'; color: var(--text-dim); font-size: 0.8em; }
+
+/* Year accordion */
+.year-details { margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.year-details summary {
+  padding: 10px 16px; background: var(--surface); cursor: pointer;
+  list-style: none; display: flex; align-items: center; gap: 8px;
+}
+.year-details summary::-webkit-details-marker { display: none; }
+.year-details summary::before { content: '\\25B6'; font-size: 0.7em; color: var(--text-dim); transition: transform 0.2s; }
+.year-details[open] summary::before { transform: rotate(90deg); }
+.year-details summary:hover { background: rgba(88,166,255,0.08); }
+.year-body { padding: 12px 16px; }
+.year-body .tbl { font-size: 0.85em; }
+
+/* Search */
+.search-box {
+  width: 100%; max-width: 400px; padding: 8px 12px; margin-bottom: 12px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; font-size: 0.9em; outline: none;
+}
+.search-box:focus { border-color: var(--accent); }
+
+/* Footer */
+footer {
+  margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border);
+  color: var(--text-dim); font-size: 0.85em; text-align: center;
+}
+
+/* Object file panel */
+.obj-link { cursor: pointer; }
+.file-panel td { padding: 0 !important; border-bottom: none !important; }
+.file-panel-inner {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  margin: 4px 8px 8px; padding: 10px 14px; overflow-x: auto;
+}
+.file-panel-inner table {
+  width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.82em;
+}
+.file-panel-inner th {
+  text-align: left; padding: 3px 8px; color: var(--text-dim);
+  border-bottom: 1px solid var(--border); font-weight: 600;
+}
+.file-panel-inner td { padding: 2px 8px; color: var(--text); }
+.file-panel-inner tr:hover td { background: rgba(88,166,255,0.06); }
+.file-panel-inner .fp-path { user-select: all; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  body { padding: 12px; }
+  .tbl { display: block; overflow-x: auto; }
+  .dashboard { grid-template-columns: repeat(2, 1fr); }
+}
+"""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# JavaScript
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_JS = """\
+function toggleAll(expand) {
+  document.querySelectorAll('details.year-details').forEach(d => d.open = expand);
+}
+
+function sortTable(tableId, colIdx) {
+  const table = document.getElementById(tableId);
+  const tbody = table.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const th = table.querySelectorAll('thead th')[colIdx];
+
+  // Determine sort direction
+  const curDir = th.dataset.sortDir || 'none';
+  // Reset all headers
+  table.querySelectorAll('thead th').forEach(h => h.dataset.sortDir = 'none');
+  const newDir = curDir === 'asc' ? 'desc' : 'asc';
+  th.dataset.sortDir = newDir;
+
+  rows.sort((a, b) => {
+    let aCell = a.cells[colIdx];
+    let bCell = b.cells[colIdx];
+    let aVal = aCell.dataset.sort !== undefined ? aCell.dataset.sort : aCell.textContent.trim();
+    let bVal = bCell.dataset.sort !== undefined ? bCell.dataset.sort : bCell.textContent.trim();
+
+    // Try numeric comparison
+    let aNum = parseFloat(aVal);
+    let bNum = parseFloat(bVal);
+    if (!isNaN(aNum) && !isNaN(bNum)) {
+      return newDir === 'asc' ? aNum - bNum : bNum - aNum;
+    }
+    // String comparison
+    let cmp = aVal.localeCompare(bVal, undefined, {sensitivity: 'base'});
+    return newDir === 'asc' ? cmp : -cmp;
+  });
+
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+function filterMaster() {
+  const query = document.getElementById('master-search').value.toLowerCase();
+  const tbody = document.querySelector('#master-table tbody');
+  tbody.querySelectorAll('tr').forEach(row => {
+    if (row.classList.contains('file-panel')) { row.remove(); return; }
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(query) ? '' : 'none';
+  });
+}
+
+function showFiles(el) {
+  const obj = el.getAttribute('data-obj');
+  const row = el.closest('tr');
+  const next = row.nextElementSibling;
+
+  // Toggle off if already open for this object
+  if (next && next.classList.contains('file-panel') && next.dataset.obj === obj) {
+    next.remove();
+    return;
+  }
+  // Remove any other open panel in the same table
+  const tbody = row.closest('tbody');
+  const existing = tbody.querySelector('tr.file-panel');
+  if (existing) existing.remove();
+
+  const files = (DATA.file_index || {})[obj];
+  if (!files || files.length === 0) return;
+
+  const cols = row.closest('table').querySelector('thead tr').cells.length;
+  const panel = document.createElement('tr');
+  panel.className = 'file-panel';
+  panel.dataset.obj = obj;
+  const td = document.createElement('td');
+  td.colSpan = cols;
+
+  let html = '<div class="file-panel-inner"><table><thead><tr>' +
+    '<th>Filename</th><th>Date</th><th>Telescope</th><th>Filter</th><th>Exposure</th><th>Path</th>' +
+    '</tr></thead><tbody>';
+  for (const f of files) {
+    const exp = parseFloat(f.exptime);
+    const expStr = isNaN(exp) ? f.exptime : (exp >= 3600 ? (exp/3600).toFixed(1)+'h' : exp >= 60 ? (exp/60).toFixed(1)+'m' : exp+'s');
+    const pathCell = WEB_MODE
+      ? '<td class="fp-path"><a href="' + esc(f.path) + '" download>' + esc(f.path) + '</a></td>'
+      : '<td class="fp-path">' + esc(f.path) + '</td>';
+    html += '<tr>' +
+      '<td>' + esc(f.filename) + '</td>' +
+      '<td>' + esc(f.date) + '</td>' +
+      '<td>' + esc(f.telescope) + '</td>' +
+      '<td>' + esc(f.filter) + '</td>' +
+      '<td>' + expStr + '</td>' +
+      pathCell + '</tr>';
+  }
+  html += '</tbody></table></div>';
+  td.innerHTML = html;
+  panel.appendChild(td);
+  row.after(panel);
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Main
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    t_start = time.time()
+
+    # 1. Scan all FITS files
+    records = scan_archive()
+
+    # 2. Resolve science targets via Simbad
+    resolve_objects(records)
+
+    # 3. Write CSV
+    write_csv(records)
+
+    # 4. Build and write JSON
+    data = build_json(records)
+    write_json(data)
+
+    # 5. Generate HTML (local version)
+    generate_html(data)
+
+    # 6. Generate web HTML (relative URLs for server deployment)
+    web_data = copy.deepcopy(data)
+    web_data["archive_root"] = WEB_BASE_URL
+    archive_prefix = str(ARCHIVE_ROOT) + "/"
+    for obj, files in web_data.get("file_index", {}).items():
+        for f in files:
+            if f["path"].startswith(archive_prefix):
+                f["path"] = f["path"][len(archive_prefix):]
+    generate_html(web_data, web_mode=True)
+
+    elapsed = time.time() - t_start
+    print(f"\nDone in {elapsed:.1f}s — {len(records):,} files processed")
+    print(f"  CSV:  {CSV_PATH}")
+    print(f"  JSON: {JSON_PATH}")
+    print(f"  HTML: {HTML_PATH}")
+    print(f"  Web:  {WEB_HTML_PATH}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,1142 @@
+{
+  "118p": null,
+  "144P": null,
+  "2003 CK10": null,
+  "2021 S3": null,
+  "2021T4": null,
+  "2023 A3": null,
+  "2023 E0 3": null,
+  "2023 EO": null,
+  "2023 EO ": null,
+  "2023 EO 2": null,
+  "2024 E1": null,
+  "207p": null,
+  "2726": null,
+  "29P": null,
+  "29P 2": {
+    "main_id": "87GB 210153.9+504841",
+    "ra": 315.875833,
+    "dec": 51.010278,
+    "otype": "Rad"
+  },
+  "62P": null,
+  "62P 2": null,
+  "62P joli": null,
+  "62PP": null,
+  "78cnc": {
+    "main_id": "*  78 Cnc",
+    "ra": 137.259632,
+    "dec": 17.469653,
+    "otype": "PM*"
+  },
+  "A 1656": {
+    "main_id": "ACO  1656",
+    "ra": 194.93502,
+    "dec": 27.91246,
+    "otype": "ClG"
+  },
+  "A1 80s 2": null,
+  "A10kQuP": null,
+  "A1703": {
+    "main_id": "ACO  1703",
+    "ra": 198.771667,
+    "dec": 51.817222,
+    "otype": "ClG"
+  },
+  "A2 200s": null,
+  "ACO 1656": {
+    "main_id": "ACO  1656",
+    "ra": 194.93502,
+    "dec": 27.91246,
+    "otype": "ClG"
+  },
+  "ACO1656": {
+    "main_id": "ACO  1656",
+    "ra": 194.93502,
+    "dec": 27.91246,
+    "otype": "ClG"
+  },
+  "ACO1656V2": null,
+  "AWM7": {
+    "main_id": "2A 0251+413",
+    "ra": 43.6108,
+    "dec": 41.557,
+    "otype": "ClG"
+  },
+  "Aspirateur": null,
+  "Autosave Image": null,
+  "Black Eye": null,
+  "C/2022 E2": null,
+  "C0QQC45": null,
+  "C11ZDU1": null,
+  "C2019Y4": null,
+  "C2022 E2": null,
+  "C2023 A3 1": null,
+  "C2AJT22 com": null,
+  "CHAMP8": null,
+  "COMA-cluster": {
+    "main_id": "ACO  1656",
+    "ra": 194.93502,
+    "dec": 27.91246,
+    "otype": "ClG"
+  },
+  "COMA-cluster-border": null,
+  "CVN20": null,
+  "Calibration prof": null,
+  "Champ 1": null,
+  "Champ 2 45s": null,
+  "Cheval": null,
+  "Coma A1656": null,
+  "Coma Cluster": {
+    "main_id": "ACO  1656",
+    "ra": 194.93502,
+    "dec": 27.91246,
+    "otype": "ClG"
+  },
+  "Coma Cluster Border": null,
+  "Coma Cote": null,
+  "Coma N4874": null,
+  "ComaCluster": null,
+  "Comete 12p ": null,
+  "EuclidQ1": null,
+  "Euphrosyne": null,
+  "Euphrosyne 1": null,
+  "Euphrosyne 2": null,
+  "Euphrosyne 3": null,
+  "Euphrosyne 4": null,
+  "Euphrosyne 5": null,
+  "FLAT CLEAR DOME": null,
+  "Flat": null,
+  "Flat 6648": null,
+  "Flat B": null,
+  "Flat B Test": null,
+  "Flat G": null,
+  "Flat Ha": null,
+  "Flat Ha Test": null,
+  "Flat OIII": null,
+  "Flat R": null,
+  "Flat S Test": null,
+  "Flat SII": null,
+  "Flat SII Test": null,
+  "Flat V": null,
+  "Flat clear": null,
+  "Flat i": null,
+  "Flat i Test": null,
+  "FlatDome": null,
+  "Frigga": null,
+  "Gaia": null,
+  "Gaia18aak": {
+    "main_id": "AT 2018C",
+    "ra": 63.005083,
+    "dec": 76.015919,
+    "otype": "No*"
+  },
+  "HAT-P-32": {
+    "main_id": "HAT-P-32",
+    "ra": 31.042823,
+    "dec": 46.687837,
+    "otype": "*"
+  },
+  "HD107610": {
+    "main_id": "HD 107610",
+    "ra": 185.484375,
+    "dec": 47.182204,
+    "otype": "PM*"
+  },
+  "HD110897": {
+    "main_id": "*  10 CVn",
+    "ra": 191.247521,
+    "dec": 39.278916,
+    "otype": "PM*"
+  },
+  "HD127614": {
+    "main_id": "HD 127614",
+    "ra": 218.972486,
+    "dec": -69.020614,
+    "otype": "*"
+  },
+  "HD127617": {
+    "main_id": "HD 127617",
+    "ra": 217.998157,
+    "dec": 18.76687,
+    "otype": "Em*"
+  },
+  "HD162428": {
+    "main_id": "HD 162428",
+    "ra": 267.505134,
+    "dec": 24.46808,
+    "otype": "Be*"
+  },
+  "HD174638": {
+    "main_id": "* bet Lyr",
+    "ra": 282.51998,
+    "dec": 33.362667,
+    "otype": "SB*"
+  },
+  "HD175511": {
+    "main_id": "HD 175511",
+    "ra": 283.009191,
+    "dec": 59.667039,
+    "otype": "Be*"
+  },
+  "HD42618": {
+    "main_id": "HD  42618",
+    "ra": 93.002362,
+    "dec": 6.783072,
+    "otype": "PM*"
+  },
+  "HD50658": {
+    "main_id": "* psi09 Aur",
+    "ra": 104.133575,
+    "dec": 46.273999,
+    "otype": "Be*"
+  },
+  "HD51530": {
+    "main_id": "*  39 Gem",
+    "ra": 104.697543,
+    "dec": 26.08108,
+    "otype": "**"
+  },
+  "HD60848": {
+    "main_id": "HD  60848",
+    "ra": 114.273886,
+    "dec": 16.90425,
+    "otype": "Be*"
+  },
+  "HD63433": {
+    "main_id": "HD  63433",
+    "ra": 117.479419,
+    "dec": 27.363183,
+    "otype": "MS*"
+  },
+  "HD69809": {
+    "main_id": "HD  69809",
+    "ra": 124.805788,
+    "dec": 14.20068,
+    "otype": "*"
+  },
+  "HD73618": {
+    "main_id": "HD  73618",
+    "ra": 129.985409,
+    "dec": 19.552997,
+    "otype": "**"
+  },
+  "HD81357": {
+    "main_id": "HD  81357",
+    "ra": 141.849636,
+    "dec": 58.14284,
+    "otype": "Em*"
+  },
+  "HD84937": {
+    "main_id": "HD  84937",
+    "ra": 147.233747,
+    "dec": 13.744257,
+    "otype": "Pe*"
+  },
+  "HIP 29216": {
+    "main_id": "HD  42088",
+    "ra": 92.414887,
+    "dec": 20.487625,
+    "otype": "*"
+  },
+  "HIP28159": {
+    "main_id": "HD  40040",
+    "ra": 89.257401,
+    "dec": 15.741366,
+    "otype": "PM*"
+  },
+  "HIP29716": {
+    "main_id": "HD  43318",
+    "ra": 93.892771,
+    "dec": -0.512189,
+    "otype": "PM*"
+  },
+  "HIP34017": {
+    "main_id": "HD  52711",
+    "ra": 105.876913,
+    "dec": 29.337081,
+    "otype": "PM*"
+  },
+  "HIP36491": {
+    "main_id": "HD  59374",
+    "ra": 112.620903,
+    "dec": 18.961282,
+    "otype": "PM*"
+  },
+  "HIP36855": {
+    "main_id": "HD  59875",
+    "ra": 113.66317,
+    "dec": 51.545748,
+    "otype": "SB*"
+  },
+  "HIP37194": {
+    "main_id": "HD  61034",
+    "ra": 114.61303,
+    "dec": 28.317178,
+    "otype": "**"
+  },
+  "HIP37197": {
+    "main_id": "HD  60987A",
+    "ra": 114.625937,
+    "dec": 33.711529,
+    "otype": "Pu*"
+  },
+  "HIP37789": {
+    "main_id": "HD  62301",
+    "ra": 116.234137,
+    "dec": 39.556365,
+    "otype": "PM*"
+  },
+  "HIP38541": {
+    "main_id": "HD  64090",
+    "ra": 118.388004,
+    "dec": 30.605071,
+    "otype": "Pe*"
+  },
+  "HIP41544": {
+    "main_id": "HD  71089",
+    "ra": 127.077157,
+    "dec": 56.601481,
+    "otype": "PM*"
+  },
+  "HIP42356": {
+    "main_id": "HD  73226",
+    "ra": 129.535446,
+    "dec": 26.048977,
+    "otype": "PM*"
+  },
+  "HIP43393": {
+    "main_id": "HD  75530",
+    "ra": 132.587503,
+    "dec": -5.536028,
+    "otype": "PM*"
+  },
+  "HIP44441": {
+    "main_id": "HD  77408",
+    "ra": 135.815596,
+    "dec": 32.881435,
+    "otype": "PM*"
+  },
+  "HIP46005": {
+    "main_id": "V* FN Cam",
+    "ra": 140.741856,
+    "dec": 77.21971,
+    "otype": "SB*"
+  },
+  "HIP47727": {
+    "main_id": "V* W UMa",
+    "ra": 145.93946,
+    "dec": 55.952517,
+    "otype": "SB*"
+  },
+  "HIP49942": {
+    "main_id": "HD  88371",
+    "ra": 152.950286,
+    "dec": 23.755196,
+    "otype": "PM*"
+  },
+  "HIP56109": {
+    "main_id": "V* AW UMa",
+    "ra": 172.517983,
+    "dec": 29.964632,
+    "otype": "SB*"
+  },
+  "HIP58605": {
+    "main_id": "V* AG Vir",
+    "ra": 180.2646,
+    "dec": 13.008335,
+    "otype": "SB*"
+  },
+  "HIP63405": {
+    "main_id": "HD 112887",
+    "ra": 194.887297,
+    "dec": 28.065663,
+    "otype": "*"
+  },
+  "HIP64692": {
+    "main_id": "*  19 CVn",
+    "ra": 198.883124,
+    "dec": 40.855203,
+    "otype": "SB*"
+  },
+  "HIP71284": {
+    "main_id": "* sig Boo",
+    "ra": 218.670072,
+    "dec": 29.745127,
+    "otype": "PM*"
+  },
+  "HIP73695": {
+    "main_id": "* i Boo",
+    "ra": 225.947065,
+    "dec": 47.654062,
+    "otype": "**"
+  },
+  "HIP74370": {
+    "main_id": "V* BV Dra",
+    "ra": 227.95983,
+    "dec": 61.857023,
+    "otype": "SB*"
+  },
+  "HIP84905": {
+    "main_id": "HD 157089",
+    "ra": 260.279402,
+    "dec": 1.443051,
+    "otype": "PM*"
+  },
+  "Hat P 32 b": {
+    "main_id": "HAT-P-32b",
+    "ra": 31.042823,
+    "dec": 46.687837,
+    "otype": "Pl"
+  },
+  "Hat-P-10-": {
+    "main_id": "WASP-11",
+    "ra": 47.368931,
+    "dec": 30.673573,
+    "otype": "**"
+  },
+  "Hat-P-36": {
+    "main_id": "HAT-P-36",
+    "ra": 188.266275,
+    "dec": 44.915332,
+    "otype": "*"
+  },
+  "IC 1805": {
+    "main_id": "IC 1805",
+    "ra": 38.217083,
+    "dec": 61.476667,
+    "otype": "OpC"
+  },
+  "IC10": {
+    "main_id": "IC   10",
+    "ra": 5.07223,
+    "dec": 59.303791,
+    "otype": "rG"
+  },
+  "IC10 Test": null,
+  "J0254": null,
+  "J0254 B": null,
+  "J0254 R": null,
+  "JWST": null,
+  "Kirik": null,
+  "Kozai": null,
+  "Kozai 2": null,
+  "LDN 1627": {
+    "main_id": "LDN 1627",
+    "ra": 86.6125,
+    "dec": 0.046667,
+    "otype": "DNe"
+  },
+  "M 1": {
+    "main_id": "M   1",
+    "ra": 83.6324,
+    "dec": 22.0174,
+    "otype": "SNR"
+  },
+  "M 101": {
+    "main_id": "M 101",
+    "ra": 210.802429,
+    "dec": 54.34875,
+    "otype": "GiP"
+  },
+  "M 106": {
+    "main_id": "M 106",
+    "ra": 184.740083,
+    "dec": 47.303719,
+    "otype": "Sy2"
+  },
+  "M 51": {
+    "main_id": "M  51",
+    "ra": 202.469575,
+    "dec": 47.195258,
+    "otype": "Sy2"
+  },
+  "M 67": {
+    "main_id": "NGC  2682",
+    "ra": 132.847917,
+    "dec": 11.815,
+    "otype": "OpC"
+  },
+  "M 81": {
+    "main_id": "M  81",
+    "ra": 148.888219,
+    "dec": 69.065295,
+    "otype": "Sy2"
+  },
+  "M 82": {
+    "main_id": "M  82",
+    "ra": 148.968458,
+    "dec": 69.679703,
+    "otype": "AGN"
+  },
+  "M 86": {
+    "main_id": "M  86",
+    "ra": 186.549225,
+    "dec": 12.945969,
+    "otype": "GiG"
+  },
+  "M1": {
+    "main_id": "M   1",
+    "ra": 83.6324,
+    "dec": 22.0174,
+    "otype": "SNR"
+  },
+  "M101": {
+    "main_id": "M 101",
+    "ra": 210.802429,
+    "dec": 54.34875,
+    "otype": "GiP"
+  },
+  "M104": {
+    "main_id": "M 104",
+    "ra": 189.997633,
+    "dec": -11.623054,
+    "otype": "LIN"
+  },
+  "M104 ": {
+    "main_id": "M 104",
+    "ra": 189.997633,
+    "dec": -11.623054,
+    "otype": "LIN"
+  },
+  "M104 Sombrero": null,
+  "M105": {
+    "main_id": "M 105",
+    "ra": 161.956667,
+    "dec": 12.581631,
+    "otype": "LIN"
+  },
+  "M108": {
+    "main_id": "M 108",
+    "ra": 167.879029,
+    "dec": 55.674122,
+    "otype": "AGN"
+  },
+  "M13 ": {
+    "main_id": "M  13",
+    "ra": 250.423475,
+    "dec": 36.461319,
+    "otype": "GlC"
+  },
+  "M38 ": {
+    "main_id": "M  38",
+    "ra": 82.166667,
+    "dec": 35.818889,
+    "otype": "OpC"
+  },
+  "M42": {
+    "main_id": "M  42",
+    "ra": 83.8201,
+    "dec": -5.3876,
+    "otype": "HII"
+  },
+  "M42 ": {
+    "main_id": "M  42",
+    "ra": 83.8201,
+    "dec": -5.3876,
+    "otype": "HII"
+  },
+  "M48": {
+    "main_id": "NGC  2548",
+    "ra": 123.391667,
+    "dec": -5.719722,
+    "otype": "OpC"
+  },
+  "M49": {
+    "main_id": "M  49",
+    "ra": 187.4449,
+    "dec": 8.0004,
+    "otype": "Sy2"
+  },
+  "M51": {
+    "main_id": "M  51",
+    "ra": 202.469575,
+    "dec": 47.195258,
+    "otype": "Sy2"
+  },
+  "M57 ": {
+    "main_id": "M  57",
+    "ra": 283.396237,
+    "dec": 33.029134,
+    "otype": "PN"
+  },
+  "M60": {
+    "main_id": "M  60",
+    "ra": 190.916545,
+    "dec": 11.552691,
+    "otype": "GiC"
+  },
+  "M63": {
+    "main_id": "M  63",
+    "ra": 198.955309,
+    "dec": 42.029369,
+    "otype": "LIN"
+  },
+  "M63 ": {
+    "main_id": "M  63",
+    "ra": 198.955309,
+    "dec": 42.029369,
+    "otype": "LIN"
+  },
+  "M65-M66": null,
+  "M66": {
+    "main_id": "M  66",
+    "ra": 170.0626,
+    "dec": 12.9915,
+    "otype": "AGN"
+  },
+  "M67": {
+    "main_id": "NGC  2682",
+    "ra": 132.847917,
+    "dec": 11.815,
+    "otype": "OpC"
+  },
+  "M67 ": {
+    "main_id": "NGC  2682",
+    "ra": 132.847917,
+    "dec": 11.815,
+    "otype": "OpC"
+  },
+  "M67 2 ": null,
+  "M67 40s": null,
+  "M67champ1 ": null,
+  "M67champ2 ": null,
+  "M81": {
+    "main_id": "M  81",
+    "ra": 148.888219,
+    "dec": 69.065295,
+    "otype": "Sy2"
+  },
+  "M82": {
+    "main_id": "M  82",
+    "ra": 148.968458,
+    "dec": 69.679703,
+    "otype": "AGN"
+  },
+  "M84": {
+    "main_id": "M  84",
+    "ra": 186.265597,
+    "dec": 12.886983,
+    "otype": "Sy2"
+  },
+  "M85": {
+    "main_id": "M  85",
+    "ra": 186.350221,
+    "dec": 18.191081,
+    "otype": "GiP"
+  },
+  "M86": {
+    "main_id": "M  86",
+    "ra": 186.549225,
+    "dec": 12.945969,
+    "otype": "GiG"
+  },
+  "M87": {
+    "main_id": "M  87",
+    "ra": 187.705931,
+    "dec": 12.391123,
+    "otype": "AGN"
+  },
+  "M91": {
+    "main_id": "M  91",
+    "ra": 188.860186,
+    "dec": 14.496322,
+    "otype": "LIN"
+  },
+  "M92 ": {
+    "main_id": "M  92",
+    "ra": 259.280792,
+    "dec": 43.135944,
+    "otype": "GlC"
+  },
+  "M96 ": {
+    "main_id": "M  96",
+    "ra": 161.6906,
+    "dec": 11.819939,
+    "otype": "GiP"
+  },
+  "M99": {
+    "main_id": "M  99",
+    "ra": 184.706771,
+    "dec": 14.416489,
+    "otype": "H2G"
+  },
+  "M99 ": {
+    "main_id": "M  99",
+    "ra": 184.706771,
+    "dec": 14.416489,
+    "otype": "H2G"
+  },
+  "M99 2 ": null,
+  "McCracken": null,
+  "McCracken ": null,
+  "McCracken 2": null,
+  "McCracker": null,
+  "Moon": null,
+  "N628 R": null,
+  "NGC 1502": {
+    "main_id": "NGC  1502",
+    "ra": 61.955833,
+    "dec": 62.326389,
+    "otype": "OpC"
+  },
+  "NGC 2301": {
+    "main_id": "NGC  2301",
+    "ra": 102.9625,
+    "dec": 0.476389,
+    "otype": "OpC"
+  },
+  "NGC 2420": {
+    "main_id": "NGC  2420",
+    "ra": 114.6025,
+    "dec": 21.573889,
+    "otype": "OpC"
+  },
+  "NGC 2539 ": {
+    "main_id": "NGC  2539",
+    "ra": 122.662917,
+    "dec": -12.831111,
+    "otype": "OpC"
+  },
+  "NGC 2548": {
+    "main_id": "NGC  2548",
+    "ra": 123.391667,
+    "dec": -5.719722,
+    "otype": "OpC"
+  },
+  "NGC 2548 30sec": null,
+  "NGC 2548 5sec": null,
+  "NGC 2682": {
+    "main_id": "NGC  2682",
+    "ra": 132.847917,
+    "dec": 11.815,
+    "otype": "OpC"
+  },
+  "NGC 2682 30sec": null,
+  "NGC 2682 5sec": null,
+  "NGC 2903": {
+    "main_id": "NGC  2903",
+    "ra": 143.042129,
+    "dec": 21.500831,
+    "otype": "AGN"
+  },
+  "NGC 3377": {
+    "main_id": "NGC  3377",
+    "ra": 161.926667,
+    "dec": 13.985639,
+    "otype": "GiP"
+  },
+  "NGC 3384": {
+    "main_id": "NGC  3384",
+    "ra": 162.070356,
+    "dec": 12.62927,
+    "otype": "GiG"
+  },
+  "NGC 3718": {
+    "main_id": "NGC  3718",
+    "ra": 173.145238,
+    "dec": 53.067922,
+    "otype": "Sy2"
+  },
+  "NGC 4565": {
+    "main_id": "NGC  4565",
+    "ra": 189.086683,
+    "dec": 25.987392,
+    "otype": "Sy2"
+  },
+  "NGC 4697": {
+    "main_id": "NGC  4697",
+    "ra": 192.149576,
+    "dec": -5.80069,
+    "otype": "GiG"
+  },
+  "NGC 5846": {
+    "main_id": "NGC  5846",
+    "ra": 226.621887,
+    "dec": 1.605636,
+    "otype": "rG"
+  },
+  "NGC1912": {
+    "main_id": "M  38",
+    "ra": 82.166667,
+    "dec": 35.818889,
+    "otype": "OpC"
+  },
+  "NGC2158": {
+    "main_id": "NGC  2158",
+    "ra": 91.86125,
+    "dec": 24.098056,
+    "otype": "OpC"
+  },
+  "NGC2539 ": {
+    "main_id": "NGC  2539",
+    "ra": 122.662917,
+    "dec": -12.831111,
+    "otype": "OpC"
+  },
+  "NGC2768": {
+    "main_id": "NGC  2768",
+    "ra": 137.906267,
+    "dec": 60.037208,
+    "otype": "SyG"
+  },
+  "NGC3377": {
+    "main_id": "NGC  3377",
+    "ra": 161.926667,
+    "dec": 13.985639,
+    "otype": "GiP"
+  },
+  "NGC3384": {
+    "main_id": "NGC  3384",
+    "ra": 162.070356,
+    "dec": 12.62927,
+    "otype": "GiG"
+  },
+  "NGC3938 ": {
+    "main_id": "NGC  3938",
+    "ra": 178.205973,
+    "dec": 44.120749,
+    "otype": "GiG"
+  },
+  "NGC4008": {
+    "main_id": "NGC  4008",
+    "ra": 179.570908,
+    "dec": 28.192466,
+    "otype": "GiC"
+  },
+  "NGC4278": {
+    "main_id": "NGC  4278",
+    "ra": 185.028434,
+    "dec": 29.280756,
+    "otype": "LIN"
+  },
+  "NGC4365": {
+    "main_id": "NGC  4365",
+    "ra": 186.117617,
+    "dec": 7.317519,
+    "otype": "GiG"
+  },
+  "NGC4494": {
+    "main_id": "NGC  4494",
+    "ra": 187.850163,
+    "dec": 25.77502,
+    "otype": "GiP"
+  },
+  "NGC4636": {
+    "main_id": "NGC  4636",
+    "ra": 190.707639,
+    "dec": 2.687764,
+    "otype": "LIN"
+  },
+  "NGC4874": {
+    "main_id": "NGC  4874",
+    "ra": 194.898789,
+    "dec": 27.959248,
+    "otype": "LIN"
+  },
+  "NGC5322": {
+    "main_id": "NGC  5322",
+    "ra": 207.3135,
+    "dec": 60.1905,
+    "otype": "SyG"
+  },
+  "NGC5557": {
+    "main_id": "NGC  5557",
+    "ra": 214.607117,
+    "dec": 36.493689,
+    "otype": "GiG"
+  },
+  "NGC5566": {
+    "main_id": "NGC  5566",
+    "ra": 215.083115,
+    "dec": 3.93359,
+    "otype": "AG?"
+  },
+  "NGC5813": {
+    "main_id": "NGC  5813",
+    "ra": 225.296793,
+    "dec": 1.701984,
+    "otype": "LIN"
+  },
+  "Nebuleuse de la chouette": null,
+  "PGZ1 ": null,
+  "PSZ1-cluster": null,
+  "PSZ1G029": null,
+  "Pandora": null,
+  "Pandora 8": null,
+  "Pandora r 2": null,
+  "Pandora r 3": null,
+  "QSO B1422+2309": {
+    "main_id": "QSO B1422+2309",
+    "ra": 216.158724,
+    "dec": 22.933496,
+    "otype": "BLL"
+  },
+  "QSO B1425+606": {
+    "main_id": "QSO B1425+606",
+    "ra": 216.734104,
+    "dec": 60.430781,
+    "otype": "QSO"
+  },
+  "SCAX new ": null,
+  "T080 NGC2683": null,
+  "T080 bias": null,
+  "T080 flat": null,
+  "TOI-3714b transit ": {
+    "main_id": "TOI-3714",
+    "ra": 69.552231,
+    "dec": 39.458308,
+    "otype": "PM*"
+  },
+  "Tete de cheval ": null,
+  "Tourbillon": null,
+  "TrES-5 b": null,
+  "V": null,
+  "V451 Dra": {
+    "main_id": "NSVS    828607",
+    "ra": 171.105623,
+    "dec": 77.70434,
+    "otype": "dS*"
+  },
+  "VdB 141": {
+    "main_id": "BD+67  1300",
+    "ra": 319.109703,
+    "dec": 68.260155,
+    "otype": "*"
+  },
+  "Virgo M86": null,
+  "Vulcano": null,
+  "Vullcano": null,
+  "WASP-104-b": {
+    "main_id": "WASP-104b",
+    "ra": 160.602509,
+    "dec": 7.435081,
+    "otype": "Pl"
+  },
+  "WASP-33-b": {
+    "main_id": "HD  15082b",
+    "ra": 36.712743,
+    "dec": 37.550482,
+    "otype": "Pl"
+  },
+  "WASP104 B": null,
+  "X81876": null,
+  "ZTs0209": null,
+  "a10tqqp": null,
+  "a10tqqp bis": null,
+  "aco1228 ": {
+    "main_id": "ACO  1228",
+    "ra": 170.377083,
+    "dec": 34.2225,
+    "otype": "ClG"
+  },
+  "alcyone": {
+    "main_id": "* eta Tau",
+    "ra": 56.871152,
+    "dec": 24.105136,
+    "otype": "Be*"
+  },
+  "alptau": null,
+  "amas Coma": null,
+  "amas Coma d??cal??": null,
+  "amas Coma dÃ©calÃ©": null,
+  "amas coma decale": null,
+  "bellatrix": {
+    "main_id": "* gam Ori",
+    "ra": 81.282764,
+    "dec": 6.349703,
+    "otype": "V*"
+  },
+  "betaDra": null,
+  "betaUMa": null,
+  "bias": null,
+  "cathode": null,
+  "ceres": null,
+  "champ 2": null,
+  "champ 4 cosmos": null,
+  "champ1": null,
+  "champ3": null,
+  "champ3bis": null,
+  "champ8": null,
+  "champ8bis": null,
+  "coma": null,
+  "coma cluster": {
+    "main_id": "ACO  1656",
+    "ra": 194.93502,
+    "dec": 27.91246,
+    "otype": "ClG"
+  },
+  "coma cote ": null,
+  "euphrosyne 2": null,
+  "flat": null,
+  "flat ": null,
+  "flat B": null,
+  "flat Halpha": null,
+  "flat V": null,
+  "flat dome ": null,
+  "flat g": null,
+  "flat i": null,
+  "flat r": null,
+  "frigga": null,
+  "hip29716": {
+    "main_id": "HD  43318",
+    "ra": 93.892771,
+    "dec": -0.512189,
+    "otype": "PM*"
+  },
+  "hip37789": {
+    "main_id": "HD  62301",
+    "ra": 116.234137,
+    "dec": 39.556365,
+    "otype": "PM*"
+  },
+  "hip40613": {
+    "main_id": "HD  69611",
+    "ra": 124.372284,
+    "dec": -3.989618,
+    "otype": "PM*"
+  },
+  "hip40761": {
+    "main_id": "HD  69809",
+    "ra": 124.805788,
+    "dec": 14.20068,
+    "otype": "*"
+  },
+  "hip60019": {
+    "main_id": "HD 107038",
+    "ra": 184.63383,
+    "dec": -8.90442,
+    "otype": "PM*"
+  },
+  "hip62607": {
+    "main_id": "HD 111515",
+    "ra": 192.436785,
+    "dec": 1.188037,
+    "otype": "PM*"
+  },
+  "hip64792": {
+    "main_id": "* e Vir",
+    "ra": 199.193812,
+    "dec": 9.424156,
+    "otype": "PM*"
+  },
+  "hip71284": {
+    "main_id": "* sig Boo",
+    "ra": 218.670072,
+    "dec": 29.745127,
+    "otype": "PM*"
+  },
+  "hip74067": {
+    "main_id": "HD 134088",
+    "ra": 227.052363,
+    "dec": -7.913204,
+    "otype": "PM*"
+  },
+  "hip77439": {
+    "main_id": "HD 141308",
+    "ra": 237.124043,
+    "dec": -2.167458,
+    "otype": "PM*"
+  },
+  "ic434 ": {
+    "main_id": "IC  434",
+    "ra": 85.25,
+    "dec": -2.5,
+    "otype": "HII"
+  },
+  "ic434 empty ": null,
+  "kep": null,
+  "m 1": {
+    "main_id": "M   1",
+    "ra": 83.6324,
+    "dec": 22.0174,
+    "otype": "SNR"
+  },
+  "m 101": {
+    "main_id": "M 101",
+    "ra": 210.802429,
+    "dec": 54.34875,
+    "otype": "GiP"
+  },
+  "m 45": {
+    "main_id": "Cl Melotte   22",
+    "ra": 56.658333,
+    "dec": 24.178056,
+    "otype": "OpC"
+  },
+  "m 51": {
+    "main_id": "M  51",
+    "ra": 202.469575,
+    "dec": 47.195258,
+    "otype": "Sy2"
+  },
+  "m 61": {
+    "main_id": "M  61",
+    "ra": 185.478868,
+    "dec": 4.473777,
+    "otype": "Sy2"
+  },
+  "m42": {
+    "main_id": "M  42",
+    "ra": 83.8201,
+    "dec": -5.3876,
+    "otype": "HII"
+  },
+  "m51": {
+    "main_id": "M  51",
+    "ra": 202.469575,
+    "dec": 47.195258,
+    "otype": "Sy2"
+  },
+  "mars": null,
+  "mini moon": null,
+  "moon bin1 R": null,
+  "moon bin1 Rgunn": null,
+  "muUMa": null,
+  "ngc 2174": {
+    "main_id": "NGC  2174",
+    "ra": 92.425,
+    "dec": 20.5,
+    "otype": "HII"
+  },
+  "ngc 2655": {
+    "main_id": "NGC  2655",
+    "ra": 133.907213,
+    "dec": 78.223083,
+    "otype": "Sy2"
+  },
+  "ngc 2775": {
+    "main_id": "NGC  2775",
+    "ra": 137.583889,
+    "dec": 7.038021,
+    "otype": "AG?"
+  },
+  "ngc 2903": {
+    "main_id": "NGC  2903",
+    "ra": 143.042129,
+    "dec": 21.500831,
+    "otype": "AGN"
+  },
+  "ngc2438 ": {
+    "main_id": "NGC  2438",
+    "ra": 115.460498,
+    "dec": -14.735408,
+    "otype": "PN"
+  },
+  "ngc2903 ": {
+    "main_id": "NGC  2903",
+    "ra": 143.042129,
+    "dec": 21.500831,
+    "otype": "AGN"
+  },
+  "pandora": null,
+  "pandora 05": null,
+  "pandora 4": null,
+  "pandora 6": null,
+  "pandora 7": null,
+  "saMar30": null,
+  "th-ar": null,
+  "thungstene": null,
+  "upsHer": null,
+  "vulcano": null
+}
