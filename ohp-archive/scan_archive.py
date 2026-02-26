@@ -817,6 +817,51 @@ def build_json(records):
         file_index[obj].sort(key=lambda f: (f["date"], f["filename"]))
     data["file_index"] = dict(file_index)
 
+    # ── Calibration index (T080/T120 only) ──
+    cal_index = {}  # year → telescope → binning → {bias, dark, flat}
+    for r in records:
+        tel = r["telescope"]
+        if tel not in ("T080", "T120"):
+            continue
+        itype = r["imagetyp"]
+        if itype not in ("bias", "dark", "flat"):
+            continue
+        year = r["year"]
+        if not year:
+            continue
+        xb = r.get("xbinning", "")
+        yb = r.get("ybinning", "")
+        if xb and yb:
+            bkey = f"{xb}x{yb}"
+        else:
+            bkey = "unknown"
+        cal_index.setdefault(year, {})
+        cal_index[year].setdefault(tel, {})
+        cal_index[year][tel].setdefault(bkey, {"bias": [], "dark": [], "flat": {}})
+        bucket = cal_index[year][tel][bkey]
+        entry = {
+            "filename": r["filename"],
+            "date": r["date_obs"][:10] if r["date_obs"] else "",
+            "exptime": r["exptime"],
+            "path": r["file_path"],
+        }
+        if itype == "flat":
+            filt = r["filter_canonical"] or r["filter_raw"] or "unknown"
+            bucket["flat"].setdefault(filt, [])
+            bucket["flat"][filt].append(entry)
+        else:
+            bucket[itype].append(entry)
+    # Sort each group by date
+    for year in cal_index:
+        for tel in cal_index[year]:
+            for bkey in cal_index[year][tel]:
+                bucket = cal_index[year][tel][bkey]
+                bucket["bias"].sort(key=lambda f: (f["date"], f["filename"]))
+                bucket["dark"].sort(key=lambda f: (f["date"], f["filename"]))
+                for filt in bucket["flat"]:
+                    bucket["flat"][filt].sort(key=lambda f: (f["date"], f["filename"]))
+    data["cal_index"] = cal_index
+
     # ── Filter summary ──
     fstats = defaultdict(lambda: {"frames": 0, "total_exp": 0.0})
     for r in records:
@@ -986,6 +1031,92 @@ def generate_html(data, web_mode=False):
                   f'<td>{_fmt_exp(t["total_exp"])}</td>'
                   f'<td class="mono">{", ".join(t["dates"])}</td></tr>')
             w("</tbody></table>")
+
+        # ── Calibration Inventory ──
+        cal_year = data.get("cal_index", {}).get(year, {})
+        # Collect science filters per telescope+binning for gap detection
+        sci_filters = defaultdict(lambda: defaultdict(set))  # tel -> bin -> set(filter)
+        for t in targets:
+            for tel_name in t["telescopes"]:
+                if tel_name in ("T080", "T120"):
+                    for filt in t["filters"]:
+                        # Associate with all binnings available for this tel
+                        for bkey in cal_year.get(tel_name, {}):
+                            sci_filters[tel_name][bkey].add(filt)
+        if cal_year:
+            w('<div class="cal-section">')
+            w("<h3>Calibration Inventory</h3>")
+            for tel_name in ("T080", "T120"):
+                if tel_name not in cal_year:
+                    continue
+                for bkey in sorted(cal_year[tel_name]):
+                    bucket = cal_year[tel_name][bkey]
+                    n_bias = len(bucket["bias"])
+                    n_dark = len(bucket["dark"])
+                    flat_filters = sorted(bucket["flat"].keys())
+                    w(f"<h4>{h(tel_name)} &mdash; {h(bkey)} binning</h4>")
+                    w('<table class="tbl"><thead><tr>'
+                      "<th>Type</th><th>Filter</th><th>Count</th>"
+                      "<th>Date Range</th><th>Exp Range</th></tr></thead><tbody>")
+                    # Bias row
+                    if n_bias:
+                        dates_b = [f["date"] for f in bucket["bias"] if f["date"]]
+                        d_range = f'{dates_b[0]} &ndash; {dates_b[-1]}' if len(dates_b) > 1 else (dates_b[0] if dates_b else "&mdash;")
+                        exps_b = sorted(set(f["exptime"] for f in bucket["bias"] if f["exptime"]))
+                        e_range = ", ".join(_fmt_exp(e) for e in exps_b[:3]) if exps_b else "&mdash;"
+                        cal_key_b = f"{year}_{tel_name}_{bkey}_bias"
+                        w(f'<tr><td><strong>Bias</strong></td><td>&mdash;</td>'
+                          f'<td><a href="#" class="cal-link" data-cal-type="bias" '
+                          f'data-cal-year="{h(year)}" data-cal-tel="{h(tel_name)}" '
+                          f'data-cal-bin="{h(bkey)}" data-cal-key="{h(cal_key_b)}" '
+                          f'onclick="showCalFiles(this);return false">{n_bias}</a></td>'
+                          f'<td class="mono">{d_range}</td><td>{e_range}</td></tr>')
+                    else:
+                        w('<tr><td><strong>Bias</strong></td><td>&mdash;</td>'
+                          '<td>0 <span class="cal-warn severe">missing</span></td>'
+                          '<td>&mdash;</td><td>&mdash;</td></tr>')
+                    # Dark row
+                    if n_dark:
+                        dates_d = [f["date"] for f in bucket["dark"] if f["date"]]
+                        d_range = f'{dates_d[0]} &ndash; {dates_d[-1]}' if len(dates_d) > 1 else (dates_d[0] if dates_d else "&mdash;")
+                        exps_d = sorted(set(float(f["exptime"]) for f in bucket["dark"] if f["exptime"]))
+                        e_range = ", ".join(_fmt_exp(e) for e in exps_d[:5]) if exps_d else "&mdash;"
+                        cal_key_d = f"{year}_{tel_name}_{bkey}_dark"
+                        w(f'<tr><td><strong>Dark</strong></td><td>&mdash;</td>'
+                          f'<td><a href="#" class="cal-link" data-cal-type="dark" '
+                          f'data-cal-year="{h(year)}" data-cal-tel="{h(tel_name)}" '
+                          f'data-cal-bin="{h(bkey)}" data-cal-key="{h(cal_key_d)}" '
+                          f'onclick="showCalFiles(this);return false">{n_dark}</a></td>'
+                          f'<td class="mono">{d_range}</td><td>{e_range}</td></tr>')
+                    else:
+                        w('<tr><td><strong>Dark</strong></td><td>&mdash;</td>'
+                          '<td>0 <span class="cal-warn">none</span></td>'
+                          '<td>&mdash;</td><td>&mdash;</td></tr>')
+                    # Flat rows per filter
+                    sci_for_tel_bin = sci_filters.get(tel_name, {}).get(bkey, set())
+                    for filt in flat_filters:
+                        ffiles = bucket["flat"][filt]
+                        n_flat = len(ffiles)
+                        dates_f = [f["date"] for f in ffiles if f["date"]]
+                        d_range = f'{dates_f[0]} &ndash; {dates_f[-1]}' if len(dates_f) > 1 else (dates_f[0] if dates_f else "&mdash;")
+                        exps_f = sorted(set(float(f["exptime"]) for f in ffiles if f["exptime"]))
+                        e_range = ", ".join(_fmt_exp(e) for e in exps_f[:5]) if exps_f else "&mdash;"
+                        cal_key_f = f"{year}_{tel_name}_{bkey}_flat_{filt}"
+                        w(f'<tr><td><strong>Flat</strong></td><td>{h(filt)}</td>'
+                          f'<td><a href="#" class="cal-link" data-cal-type="flat" '
+                          f'data-cal-year="{h(year)}" data-cal-tel="{h(tel_name)}" '
+                          f'data-cal-bin="{h(bkey)}" data-cal-filter="{h(filt)}" '
+                          f'data-cal-key="{html_mod.escape(cal_key_f, quote=True)}" '
+                          f'onclick="showCalFiles(this);return false">{n_flat}</a></td>'
+                          f'<td class="mono">{d_range}</td><td>{e_range}</td></tr>')
+                    # Gap warnings: science filters with no matching flat
+                    missing_flats = sorted(sci_for_tel_bin - set(flat_filters))
+                    for mf in missing_flats:
+                        w(f'<tr><td><strong>Flat</strong></td><td>{h(mf)}</td>'
+                          f'<td>0 <span class="cal-warn">no flat</span></td>'
+                          f'<td>&mdash;</td><td>&mdash;</td></tr>')
+                    w("</tbody></table>")
+            w("</div>")
 
         w("</div></details>")
 
@@ -1185,6 +1316,27 @@ footer {
 .file-panel-inner tr:hover td { background: rgba(88,166,255,0.06); }
 .file-panel-inner .fp-path { user-select: all; }
 
+/* Calibration inventory */
+.cal-section { margin-top: 20px; padding: 12px 16px; background: rgba(22,27,34,0.5); border: 1px solid var(--border); border-radius: 8px; }
+.cal-section h3 { margin-top: 0; }
+.cal-section .tbl { margin-bottom: 4px; }
+.cal-warn { display: inline-block; background: var(--orange); color: #000; font-size: 0.75em; font-weight: 700; padding: 1px 7px; border-radius: 10px; margin-left: 4px; vertical-align: middle; }
+.cal-warn.severe { background: var(--red); color: #fff; }
+.cal-link { cursor: pointer; color: var(--accent); }
+.cal-link:hover { text-decoration: underline; }
+.cal-panel td { padding: 0 !important; border-bottom: none !important; }
+.cal-panel-inner {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  margin: 4px 8px 8px; padding: 10px 14px; overflow-x: auto;
+}
+.cal-panel-inner table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.82em; }
+.cal-panel-inner th { text-align: left; padding: 3px 8px; color: var(--text-dim); border-bottom: 1px solid var(--border); font-weight: 600; }
+.cal-panel-inner td { padding: 2px 8px; color: var(--text); }
+.cal-panel-inner tr:hover td { background: rgba(88,166,255,0.06); }
+.cal-summary { font-size: 0.85em; color: var(--text-dim); margin-bottom: 6px; padding: 6px 8px; background: rgba(22,27,34,0.6); border-radius: 4px; border-left: 3px solid var(--accent); }
+.cal-summary .cal-ok { color: var(--green); }
+.cal-summary .cal-missing { color: var(--orange); font-weight: 600; }
+
 /* Responsive */
 @media (max-width: 768px) {
   body { padding: 12px; }
@@ -1245,6 +1397,56 @@ function filterMaster() {
   });
 }
 
+function getCalSummary(obj, year) {
+  // Build calibration summary for a science object in a given year (or all years)
+  const files = (DATA.file_index || {})[obj];
+  if (!files || !DATA.cal_index) return '';
+  // Determine telescope+binning combos used and science filters
+  const combos = {};  // "tel|bin" -> Set of filters
+  for (const f of files) {
+    if (year && f.date && !f.date.startsWith(year)) continue;
+    const tel = f.telescope;
+    if (tel !== 'T080' && tel !== 'T120') continue;
+    // Look up binning from cal_index structure (files don't carry binning)
+    // We'll check all binnings for this tel/year
+    const y = f.date ? f.date.substring(0, 4) : '';
+    if (!y) continue;
+    const key = tel + '|' + y;
+    if (!combos[key]) combos[key] = new Set();
+    if (f.filter) combos[key].add(f.filter);
+  }
+  if (Object.keys(combos).length === 0) return '';
+
+  const parts = [];
+  for (const key of Object.keys(combos).sort()) {
+    const [tel, y] = key.split('|');
+    const sciFilters = combos[key];
+    const calYear = (DATA.cal_index || {})[y];
+    if (!calYear || !calYear[tel]) {
+      parts.push('<span class="cal-missing">No calibrations for ' + esc(tel) + ' ' + esc(y) + '</span>');
+      continue;
+    }
+    // Check each binning available
+    for (const [bkey, bucket] of Object.entries(calYear[tel])) {
+      const flatFilters = Object.keys(bucket.flat || {});
+      const flatParts = flatFilters.map(f => bucket.flat[f].length + '\\u00d7 ' + esc(f)).join(', ');
+      let line = '<b>' + esc(tel) + ' ' + esc(bkey) + ' (' + esc(y) + ')</b>: ';
+      line += '<span class="cal-ok">' + bucket.bias.length + ' bias, ' + bucket.dark.length + ' dark</span>';
+      if (flatParts) line += ', ' + flatParts;
+      // Gap detection
+      const missing = [];
+      for (const sf of sciFilters) {
+        if (!bucket.flat[sf] || bucket.flat[sf].length === 0) missing.push(sf);
+      }
+      if (missing.length > 0) {
+        line += ' <span class="cal-missing">[no flat: ' + missing.map(esc).join(', ') + ']</span>';
+      }
+      parts.push(line);
+    }
+  }
+  return parts.length ? '<div class="cal-summary">' + parts.join('<br>') + '</div>' : '';
+}
+
 function showFiles(el) {
   const obj = el.getAttribute('data-obj');
   const row = el.closest('tr');
@@ -1263,6 +1465,14 @@ function showFiles(el) {
   const files = (DATA.file_index || {})[obj];
   if (!files || files.length === 0) return;
 
+  // Determine year context from enclosing year-details if any
+  const yearDetails = row.closest('.year-details');
+  let year = null;
+  if (yearDetails) {
+    const summary = yearDetails.querySelector('summary strong');
+    if (summary) year = summary.textContent.trim();
+  }
+
   const cols = row.closest('table').querySelector('thead tr').cells.length;
   const panel = document.createElement('tr');
   panel.className = 'file-panel';
@@ -1270,10 +1480,14 @@ function showFiles(el) {
   const td = document.createElement('td');
   td.colSpan = cols;
 
-  let html = '<div class="file-panel-inner"><table><thead><tr>' +
+  // Calibration summary at top
+  const calSummary = getCalSummary(obj, year);
+
+  let html = calSummary + '<div class="file-panel-inner"><table><thead><tr>' +
     '<th>Filename</th><th>Date</th><th>Telescope</th><th>Filter</th><th>Exposure</th><th>Path</th>' +
     '</tr></thead><tbody>';
   for (const f of files) {
+    if (year && f.date && !f.date.startsWith(year)) continue;
     const exp = parseFloat(f.exptime);
     const expStr = isNaN(exp) ? f.exptime : (exp >= 3600 ? (exp/3600).toFixed(1)+'h' : exp >= 60 ? (exp/60).toFixed(1)+'m' : exp+'s');
     const pathCell = WEB_MODE
@@ -1286,6 +1500,60 @@ function showFiles(el) {
       '<td>' + esc(f.filter) + '</td>' +
       '<td>' + expStr + '</td>' +
       pathCell + '</tr>';
+  }
+  html += '</tbody></table></div>';
+  td.innerHTML = html;
+  panel.appendChild(td);
+  row.after(panel);
+}
+
+function showCalFiles(el) {
+  const calType = el.getAttribute('data-cal-type');
+  const calYear = el.getAttribute('data-cal-year');
+  const calTel = el.getAttribute('data-cal-tel');
+  const calBin = el.getAttribute('data-cal-bin');
+  const calFilter = el.getAttribute('data-cal-filter') || null;
+  const row = el.closest('tr');
+  const next = row.nextElementSibling;
+
+  // Toggle off
+  if (next && next.classList.contains('cal-panel') && next.dataset.calKey === el.dataset.calKey) {
+    next.remove();
+    return;
+  }
+  // Remove any other open cal panel in the same table
+  const tbody = row.closest('tbody');
+  const existing = tbody.querySelector('tr.cal-panel');
+  if (existing) existing.remove();
+
+  const bucket = ((DATA.cal_index || {})[calYear] || {})[calTel];
+  if (!bucket || !bucket[calBin]) return;
+  const data = bucket[calBin];
+  let files;
+  if (calFilter) {
+    files = (data.flat || {})[calFilter] || [];
+  } else {
+    files = data[calType] || [];
+  }
+  if (files.length === 0) return;
+
+  const cols = row.closest('table').querySelector('thead tr').cells.length;
+  const panel = document.createElement('tr');
+  panel.className = 'cal-panel';
+  panel.dataset.calKey = el.dataset.calKey;
+  const td = document.createElement('td');
+  td.colSpan = cols;
+
+  let html = '<div class="cal-panel-inner"><table><thead><tr>' +
+    '<th>Filename</th><th>Date</th><th>Exposure</th><th>Path</th>' +
+    '</tr></thead><tbody>';
+  for (const f of files) {
+    const exp = parseFloat(f.exptime);
+    const expStr = isNaN(exp) ? (f.exptime || '') : (exp >= 3600 ? (exp/3600).toFixed(1)+'h' : exp >= 60 ? (exp/60).toFixed(1)+'m' : exp+'s');
+    const pathCell = WEB_MODE
+      ? '<td class="fp-path"><a href="' + esc(f.path) + '" download>' + esc(f.path) + '</a></td>'
+      : '<td class="fp-path">' + esc(f.path) + '</td>';
+    html += '<tr><td>' + esc(f.filename) + '</td><td>' + esc(f.date) + '</td><td>' + expStr + '</td>' + pathCell + '</tr>';
   }
   html += '</tbody></table></div>';
   td.innerHTML = html;
@@ -1333,6 +1601,17 @@ def main():
         for f in files:
             if f["path"].startswith(archive_prefix):
                 f["path"] = WEB_BASE_URL + f["path"][len(archive_prefix):]
+    for year_ci in web_data.get("cal_index", {}).values():
+        for tel_ci in year_ci.values():
+            for bin_ci in tel_ci.values():
+                for cal_type in ("bias", "dark"):
+                    for f in bin_ci.get(cal_type, []):
+                        if f["path"].startswith(archive_prefix):
+                            f["path"] = WEB_BASE_URL + f["path"][len(archive_prefix):]
+                for filt_files in bin_ci.get("flat", {}).values():
+                    for f in filt_files:
+                        if f["path"].startswith(archive_prefix):
+                            f["path"] = WEB_BASE_URL + f["path"][len(archive_prefix):]
     generate_html(web_data, web_mode=True)
 
     # 7. Copy web HTML to docs/ for GitHub Pages
