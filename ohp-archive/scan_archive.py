@@ -1075,23 +1075,6 @@ def generate_html(data, web_mode=False):
                         w('<tr><td><strong>Bias</strong></td><td>&mdash;</td>'
                           '<td>0 <span class="cal-warn severe">missing</span></td>'
                           '<td>&mdash;</td><td>&mdash;</td></tr>')
-                    # Dark row
-                    if n_dark:
-                        dates_d = [f["date"] for f in bucket["dark"] if f["date"]]
-                        d_range = f'{dates_d[0]} &ndash; {dates_d[-1]}' if len(dates_d) > 1 else (dates_d[0] if dates_d else "&mdash;")
-                        exps_d = sorted(set(float(f["exptime"]) for f in bucket["dark"] if f["exptime"]))
-                        e_range = ", ".join(_fmt_exp(e) for e in exps_d[:5]) if exps_d else "&mdash;"
-                        cal_key_d = f"{year}_{tel_name}_{bkey}_dark"
-                        w(f'<tr><td><strong>Dark</strong></td><td>&mdash;</td>'
-                          f'<td><a href="#" class="cal-link" data-cal-type="dark" '
-                          f'data-cal-year="{h(year)}" data-cal-tel="{h(tel_name)}" '
-                          f'data-cal-bin="{h(bkey)}" data-cal-key="{h(cal_key_d)}" '
-                          f'onclick="showCalFiles(this);return false">{n_dark}</a></td>'
-                          f'<td class="mono">{d_range}</td><td>{e_range}</td></tr>')
-                    else:
-                        w('<tr><td><strong>Dark</strong></td><td>&mdash;</td>'
-                          '<td>0 <span class="cal-warn">none</span></td>'
-                          '<td>&mdash;</td><td>&mdash;</td></tr>')
                     # Flat rows per filter
                     sci_for_tel_bin = sci_filters.get(tel_name, {}).get(bkey, set())
                     for filt in flat_filters:
@@ -1431,7 +1414,7 @@ function getCalSummary(obj, year) {
       const flatFilters = Object.keys(bucket.flat || {});
       const flatParts = flatFilters.map(f => bucket.flat[f].length + '\\u00d7 ' + esc(f)).join(', ');
       let line = '<b>' + esc(tel) + ' ' + esc(bkey) + ' (' + esc(y) + ')</b>: ';
-      line += '<span class="cal-ok">' + bucket.bias.length + ' bias, ' + bucket.dark.length + ' dark</span>';
+      line += '<span class="cal-ok">' + bucket.bias.length + ' bias</span>';
       if (flatParts) line += ', ' + flatParts;
       // Gap detection
       const missing = [];
