@@ -1106,10 +1106,26 @@ def generate_html(data, web_mode=False):
     w("</section>")
 
     # ── Master target catalogue ──
-    w('<section class="section">')
+    w('<section class="section" id="master-section">')
     w("<h2>Master Target Catalogue</h2>")
+    # Sticky filter bar
+    all_tels = sorted(tels_used)
+    all_years = sorted(data["per_year"].keys(), reverse=True)
+    w('<div class="filter-bar">')
     w('<input type="text" id="master-search" class="search-box" '
-      'placeholder="Search targets..." oninput="filterMaster()">')
+      'placeholder="Search targets... ( / )" oninput="filterMaster()">')
+    w('<select id="filter-telescope" onchange="filterMaster()">')
+    w('<option value="">All telescopes</option>')
+    for tel in all_tels:
+        w(f'<option value="{h(tel)}">{h(tel)}</option>')
+    w('</select>')
+    w('<select id="filter-year" onchange="filterMaster()">')
+    w('<option value="">All years</option>')
+    for yr in all_years:
+        w(f'<option value="{h(yr)}">{h(yr)}</option>')
+    w('</select>')
+    w('<span class="filter-count" id="filter-count"></span>')
+    w('</div>')
     w('<table class="tbl sortable" id="master-table">')
     w("<thead><tr>")
     cols = ["Object", "Simbad Name", "Type", "RA", "Dec",
@@ -1169,6 +1185,10 @@ def generate_html(data, web_mode=False):
         w(f'<p>Archive: <code>{h(str(ARCHIVE_ROOT))}</code> &middot; '
           f'Generated: {h(data["generated"])} &middot; '
           f'{data["total_files"]:,} files scanned</p>')
+    w('<p class="kbd-hint">Keyboard: '
+      '<kbd>/</kbd> search &middot; '
+      '<kbd>1</kbd>&ndash;<kbd>8</kbd> jump to year &middot; '
+      '<kbd>Esc</kbd> close panels</p>')
     w("</footer>")
 
     # ── Embedded JSON + JavaScript ──
@@ -1320,11 +1340,37 @@ footer {
 .cal-summary .cal-ok { color: var(--green); }
 .cal-summary .cal-missing { color: var(--orange); font-weight: 600; }
 
+/* Sticky filter bar */
+.filter-bar {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  padding: 8px 0; margin: -8px 0 12px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.filter-bar .search-box { margin-bottom: 0; max-width: 280px; }
+.filter-bar select {
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 7px 10px; font-size: 0.9em; outline: none; cursor: pointer;
+}
+.filter-bar select:focus { border-color: var(--accent); }
+.filter-bar .filter-count { color: var(--text-dim); font-size: 0.85em; margin-left: auto; }
+.kbd-hint {
+  color: var(--text-dim); font-size: 0.8em; margin-top: 4px;
+}
+.kbd-hint kbd {
+  display: inline-block; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 5px; font-family: var(--mono); font-size: 0.9em;
+  color: var(--text); margin: 0 1px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   body { padding: 12px; }
   .tbl { display: block; overflow-x: auto; }
   .dashboard { grid-template-columns: repeat(2, 1fr); }
+  .filter-bar { flex-direction: column; align-items: stretch; }
+  .filter-bar .search-box { max-width: 100%; }
+  .filter-bar .filter-count { margin-left: 0; }
 }
 """
 
@@ -1372,13 +1418,63 @@ function sortTable(tableId, colIdx) {
 
 function filterMaster() {
   const query = document.getElementById('master-search').value.toLowerCase();
+  const telFilter = document.getElementById('filter-telescope').value;
+  const yearFilter = document.getElementById('filter-year').value;
   const tbody = document.querySelector('#master-table tbody');
+  let shown = 0, total = 0;
   tbody.querySelectorAll('tr').forEach(row => {
     if (row.classList.contains('file-panel')) { row.remove(); return; }
+    total++;
     const text = row.textContent.toLowerCase();
-    row.style.display = text.includes(query) ? '' : 'none';
+    const telCol = row.cells[5] ? row.cells[5].textContent : '';
+    const yearCol = row.cells[9] ? row.cells[9].textContent : '';
+    const matchText = !query || text.includes(query);
+    const matchTel = !telFilter || telCol.includes(telFilter);
+    const matchYear = !yearFilter || yearCol.includes(yearFilter);
+    const vis = matchText && matchTel && matchYear;
+    row.style.display = vis ? '' : 'none';
+    if (vis) shown++;
   });
+  const countEl = document.getElementById('filter-count');
+  if (countEl) {
+    countEl.textContent = (query || telFilter || yearFilter) ? shown + ' / ' + total : total + ' targets';
+  }
 }
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+  // Ignore when typing in an input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+    if (e.key === 'Escape') { e.target.blur(); return; }
+    return;
+  }
+
+  // / → focus search
+  if (e.key === '/') {
+    e.preventDefault();
+    const search = document.getElementById('master-search');
+    if (search) { search.focus(); search.scrollIntoView({behavior: 'smooth', block: 'center'}); }
+    return;
+  }
+
+  // Esc → close any open file/cal panels
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.file-panel, .cal-panel').forEach(p => p.remove());
+    return;
+  }
+
+  // 1-8 → jump to year accordion (1 = most recent)
+  const digit = parseInt(e.key);
+  if (digit >= 1 && digit <= 8) {
+    const details = document.querySelectorAll('details.year-details');
+    const idx = digit - 1;
+    if (idx < details.length) {
+      details[idx].open = true;
+      details[idx].scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+    return;
+  }
+});
 
 function getCalSummary(obj, year) {
   // Build calibration summary for a science object in a given year (or all years)
@@ -1550,6 +1646,9 @@ function esc(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+
+// Init: show target count
+document.addEventListener('DOMContentLoaded', function() { filterMaster(); });
 """
 
 
