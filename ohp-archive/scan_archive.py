@@ -1012,27 +1012,8 @@ def generate_html(data, web_mode=False):
             w(f'<td><strong>{counts.get("total", 0)}</strong></td></tr>')
         w("</tbody></table>")
 
-        # Science targets table
+        # ── Calibration Inventory (collapsible, right after telescope breakdown) ──
         targets = ydata["targets"]
-        if targets:
-            w("<h3>Science Targets</h3>")
-            w('<table class="tbl"><thead><tr>'
-              "<th>Object</th><th>Simbad Name</th><th>Type</th>"
-              "<th>Telescope</th><th>Filters</th><th>Frames</th>"
-              "<th>Total Exp</th><th>Dates</th></tr></thead><tbody>")
-            for t in targets:
-                obj_esc = html_mod.escape(t["object"], quote=True)
-                w(f'<tr><td><a href="#" class="obj-link" data-obj="{obj_esc}" onclick="showFiles(this);return false">{h(t["object"])}</a></td>'
-                  f'<td>{h(t["simbad_name"])}</td>'
-                  f'<td>{h(t["simbad_type"])}</td>'
-                  f'<td>{", ".join(t["telescopes"])}</td>'
-                  f'<td>{", ".join(t["filters"])}</td>'
-                  f'<td>{t["frames"]}</td>'
-                  f'<td>{_fmt_exp(t["total_exp"])}</td>'
-                  f'<td class="mono">{", ".join(t["dates"])}</td></tr>')
-            w("</tbody></table>")
-
-        # ── Calibration Inventory ──
         cal_year = data.get("cal_index", {}).get(year, {})
         # Collect science filters per telescope+binning for gap detection
         sci_filters = defaultdict(lambda: defaultdict(set))  # tel -> bin -> set(filter)
@@ -1040,12 +1021,23 @@ def generate_html(data, web_mode=False):
             for tel_name in t["telescopes"]:
                 if tel_name in ("T080", "T120"):
                     for filt in t["filters"]:
-                        # Associate with all binnings available for this tel
                         for bkey in cal_year.get(tel_name, {}):
                             sci_filters[tel_name][bkey].add(filt)
         if cal_year:
+            # Count missing flats for summary
+            n_missing = 0
+            for tel_name in ("T080", "T120"):
+                if tel_name not in cal_year:
+                    continue
+                for bkey in cal_year[tel_name]:
+                    bucket = cal_year[tel_name][bkey]
+                    if not bucket["bias"]:
+                        n_missing += 1
+                    sci_for_tb = sci_filters.get(tel_name, {}).get(bkey, set())
+                    n_missing += len(sci_for_tb - set(bucket["flat"].keys()))
+            warn_badge = f' <span class="cal-warn">{n_missing} missing</span>' if n_missing else ""
+            w(f'<details class="cal-details"><summary>Calibration Inventory{warn_badge}</summary>')
             w('<div class="cal-section">')
-            w("<h3>Calibration Inventory</h3>")
             for tel_name in ("T080", "T120"):
                 if tel_name not in cal_year:
                     continue
@@ -1099,7 +1091,26 @@ def generate_html(data, web_mode=False):
                           f'<td>0 <span class="cal-warn">no flat</span></td>'
                           f'<td>&mdash;</td><td>&mdash;</td></tr>')
                     w("</tbody></table>")
-            w("</div>")
+            w("</div></details>")
+
+        # Science targets table
+        if targets:
+            w("<h3>Science Targets</h3>")
+            w('<table class="tbl"><thead><tr>'
+              "<th>Object</th><th>Simbad Name</th><th>Type</th>"
+              "<th>Telescope</th><th>Filters</th><th>Frames</th>"
+              "<th>Total Exp</th><th>Dates</th></tr></thead><tbody>")
+            for t in targets:
+                obj_esc = html_mod.escape(t["object"], quote=True)
+                w(f'<tr><td><a href="#" class="obj-link" data-obj="{obj_esc}" onclick="showFiles(this);return false">{h(t["object"])}</a></td>'
+                  f'<td>{h(t["simbad_name"])}</td>'
+                  f'<td>{h(t["simbad_type"])}</td>'
+                  f'<td>{", ".join(t["telescopes"])}</td>'
+                  f'<td>{", ".join(t["filters"])}</td>'
+                  f'<td>{t["frames"]}</td>'
+                  f'<td>{_fmt_exp(t["total_exp"])}</td>'
+                  f'<td class="mono">{", ".join(t["dates"])}</td></tr>')
+            w("</tbody></table>")
 
         w("</div></details>")
 
@@ -1320,8 +1331,13 @@ footer {
 .file-panel-inner .fp-path { user-select: all; }
 
 /* Calibration inventory */
-.cal-section { margin-top: 20px; padding: 12px 16px; background: rgba(22,27,34,0.5); border: 1px solid var(--border); border-radius: 8px; }
-.cal-section h3 { margin-top: 0; }
+.cal-details { margin-top: 12px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.cal-details summary { cursor: pointer; padding: 8px 14px; font-weight: 600; font-size: 0.95em; background: rgba(22,27,34,0.5); user-select: none; list-style: none; }
+.cal-details summary::-webkit-details-marker { display: none; }
+.cal-details summary::before { content: '\25B6'; font-size: 0.7em; color: var(--text-dim); margin-right: 8px; display: inline-block; transition: transform 0.2s; }
+.cal-details[open] summary::before { transform: rotate(90deg); }
+.cal-details summary:hover { background: rgba(88,166,255,0.08); }
+.cal-section { padding: 8px 16px 12px; }
 .cal-section .tbl { margin-bottom: 4px; }
 .cal-warn { display: inline-block; background: var(--orange); color: #000; font-size: 0.75em; font-weight: 700; padding: 1px 7px; border-radius: 10px; margin-left: 4px; vertical-align: middle; }
 .cal-warn.severe { background: var(--red); color: #fff; }
