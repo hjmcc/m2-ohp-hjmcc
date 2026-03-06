@@ -27,6 +27,23 @@ where `counts` is the total aperture flux in ADU and `exptime` is in seconds.
 | R      | 25.0     | 1.5           | 112      |
 | g      | 24.7     | 1.9           | 24       |
 
+## 2023 Run
+
+### T080 (80 cm Cassegrain)
+
+| Filter | ZP (mag) | Scatter (mag) | N frames |
+|--------|----------|---------------|----------|
+| g'     | 22.3     | 0.8           | 3        |
+| r'     | 24.6     | 0.7           | 3        |
+| i'     | 22.2     | 0.1           | 3        |
+
+### T120 (1.2 m Newton)
+
+| Filter | ZP (mag) | Scatter (mag) | N frames |
+|--------|----------|---------------|----------|
+| g      | 23.2     | 1.1           | 41       |
+| r      | 23.7     | 1.1           | 91       |
+
 ## 2024 Run
 
 ### T080 (80 cm Cassegrain)
@@ -45,21 +62,44 @@ where `counts` is the total aperture flux in ADU and `exptime` is in seconds.
 | R      | 24.2     | 1.4           | 198      |
 | g      | 23.9     | 1.2           | 93       |
 
+## 2019 Run
+
+### T080 (80 cm Cassegrain)
+
+| Filter | ZP (mag) | Scatter (mag) | N frames |
+|--------|----------|---------------|----------|
+| g'     | 21.9     | 0.4           | 136      |
+| r'     | 22.0     | 0.6           | 140      |
+| i'     | 23.1     | 0.2           | 2        |
+
 ## Year-to-Year Comparison
 
-| Telescope | Filter | 2024 ZP | 2025 ZP | Diff |
-|-----------|--------|---------|---------|------|
-| T080      | g'     | 21.5    | 20.6    | −0.9 |
-| T080      | r'     | 20.6    | 21.4    | +0.8 |
-| T080      | i'     | 21.2    | 21.2    | 0.0  |
-| T120      | V      | 25.1    | 25.9    | +0.8 |
-| T120      | R      | 24.2    | 25.0    | +0.8 |
-| T120      | g      | 23.9    | 24.7    | +0.8 |
+### T080
 
-The ~1 mag year-to-year variation is consistent with the large per-frame scatter
-and non-photometric conditions. The T080 2024 results are based on very few
-frames (4–7) and should be treated with extra caution. T120 shows a systematic
-~0.8 mag offset between years, likely due to different atmospheric conditions.
+| Filter | 2019   | 2023   | 2024   | 2025   |
+|--------|--------|--------|--------|--------|
+| g'     | 21.9   | 22.3   | 21.5   | 20.6   |
+| r'     | 22.0   | 24.6   | 20.6   | 21.4   |
+| i'     | 23.1   | 22.2   | 21.2   | 21.2   |
 
-ZP values are medians across all calibrated frames. Use these for
-order-of-magnitude flux estimates; do not rely on them for precision photometry.
+### T120
+
+| Filter | 2023   | 2024   | 2025   |
+|--------|--------|--------|--------|
+| g      | 23.2   | 23.9   | 24.7   |
+| r      | 23.7   | —      | —      |
+| R      | —      | 24.2   | 25.0   |
+| V      | —      | 25.1   | 25.9   |
+| B      | —      | —      | 25.3   |
+
+## Notes
+
+- Years 2018, 2020, 2021 produced no photometric zero points: 2018 T080 used
+  Clear filter (no PS1 match), T120 used B/R/V/Halpha; 2020 and 2021 T120
+  used B/R/V/Halpha/OIII with few astrometric solutions.
+- 2022 had no reduced frames (all 1x1 binned, mismatched expected 2x2 shape).
+- The 2023 T080 r' ZP=24.6 is anomalous (only 3 frames) and likely unreliable.
+- The ~1–2 mag year-to-year variation is consistent with the large per-frame
+  scatter and non-photometric conditions.
+- ZP values are medians across all calibrated frames. Use these for
+  order-of-magnitude flux estimates; do not rely on them for precision photometry.
