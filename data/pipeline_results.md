@@ -47,78 +47,107 @@ previously; 2018–2023 were batch-processed in March 2026.
 
 ## Astrometry
 
-WCS solutions via Gaia DR3 cross-matching with two-pass solver.
+T120 WCS solutions via `astrometry.net` `solve-field` (blind plate solving)
+with Gaia DR3 cross-match validation.  T080 still uses the original pipeline
+Gaia cross-matching solver (pending reprocessing — needs smaller-scale index
+files for its 12'×8' FOV).
 
-| Year | Telescope | Solved | Rate | Median RMS | Notes |
-|------|-----------|--------|------|-----------|-------|
-| 2018 | T080      | 452/452 | 100% | 1.9"     | Single field (HAT-P-32) |
-| 2018 | T120      | 34/34   | 100% | 2.7"     | |
-| 2019 | T080      | 1,012/1,231 | 82% | 2.1" | 13 failures, 243 HIGH_RMS |
-| 2019 | T120      | 85/87   | 98%  | 2.9"     | |
-| 2020 | T120      | 30/583  | 5%   | 3.8"     | Most objects unresolvable |
-| 2021 | T120      | 447/564 | 79%  | 5.0"     | 117 failures |
-| 2023 | T080      | 0/9     | 0%   | —        | All skipped (no WCS input) |
-| 2023 | T120      | 17/504  | 3%   | 5.7"     | 191 failures, 296 skipped |
-| 2024 | T080      | 36/83   | 43%  | 2.5"     | |
-| 2024 | T120      | 0/763   | 0%   | 12.3"    | All failed |
-| 2025 | T080      | 112/114 | 98%  | 2.0"     | |
-| 2025 | T120      | 308/359 | 86%  | 3.9"     | |
+### T120 (solve-field)
 
-**Low solve rates in 2020, 2023, 2024 T120** are caused by student-chosen
-object names that Simbad cannot resolve to sky coordinates (e.g. "McCracken",
-"saMar30", "SCAX_new", "2023_EO"). Without an initial pointing estimate the
-solver cannot query the correct Gaia field.
+| Year | Solved | Rate  | Median RMS | Notes |
+|------|--------|-------|-----------|-------|
+| 2018 | 33/34  | 97%   | 0.37"     | 1 failure (IC10) |
+| 2019 | 87/87  | 100%  | 0.36"     | |
+| 2020 | 583/583 | 100% | 0.35"     | |
+| 2021 | 549/564 | 97%  | 0.42"     | 15 failures |
+| 2023 | 500/504 | 99%  | 0.38"     | |
+| 2024 | 753/763 | 99%  | 0.35"     | |
+| 2025 | 343/359 | 95%  | 0.45"     | 15 M49/NGC5813 failures (sparse field) |
+
+**Total: 2,848/2,894 solved (98.4%), typical RMS 0.3–0.5".**
+
+### T080 (legacy pipeline solver — treat with caution)
+
+| Year | Solved | Rate  | Median RMS | Notes |
+|------|--------|-------|-----------|-------|
+| 2018 | 452/452 | 100% | 1.9"     | Single field (HAT-P-32) |
+| 2019 | 1,012/1,231 | 82% | 2.1" | 13 failures, 243 HIGH_RMS |
+| 2023 | 0/9     | 0%   | —        | All skipped (no WCS input) |
+| 2024 | 36/83   | 43%  | 2.5"     | |
+| 2025 | 112/114 | 98%  | 2.0"     | |
+
+T080 astrometry has known issues (RMS ~2" vs <0.5" for T120 solve-field).
+Pending reprocessing with solve-field once index-4203 tiles are complete.
 
 ## Photometric Zero Points
 
-Derived from PS1 DR2 cross-matching. Only frames with PS1-compatible filters
-(g/r/i) AND successful astrometric solutions produce zero points.
+Derived from PS1 DR2 cross-matching.  Values are 3σ-clipped medians;
+scatter σ reflects frame-to-frame variation (weather, airmass,
+flat-fielding).  No colour terms applied — B and V are calibrated against
+PS1 g-band.
 
 Convention: `mag = ZP - 2.5 * log10(counts / exptime)`
 
-### T080
+### T120 (solve-field astrometry)
 
-| Year | Filter | ZP (mag) | Scatter (MAD) | N frames |
-|------|--------|----------|---------------|----------|
-| 2019 | g'     | 21.9     | 0.4           | 136      |
-| 2019 | r'     | 22.0     | 0.6           | 140      |
-| 2019 | i'     | 23.1     | 0.2           | 2        |
-| 2023 | g'     | 22.3     | 0.8           | 3        |
-| 2023 | r'     | 24.6     | 0.7           | 3        |
-| 2023 | i'     | 22.2     | 0.1           | 3        |
-| 2024 | g'     | 21.5     | 2.9           | 4        |
-| 2024 | r'     | 20.6     | 3.2           | 6        |
-| 2024 | i'     | 21.2     | 1.1           | 7        |
-| 2025 | g'     | 20.6     | 1.0           | 38       |
-| 2025 | r'     | 21.4     | 1.2           | 35       |
-| 2025 | i'     | 21.2     | 1.3           | 24       |
+| Year | Band | ZP (mag) | σ (mag) | N frames | Raw filter names |
+|------|------|----------|---------|----------|-----------------|
+| 2018 | B    | 21.23    | 0.14    | 5        | B_Cousins |
+| 2018 | R    | 20.76    | 1.79    | 26       | R_Cousins |
+| 2019 | B    | 23.14    | 0.02    | 9        | B Cousins |
+| 2019 | R    | 24.19    | 0.02    | 24       | R Cousins, R_Cousins |
+| 2020 | V    | 23.23    | 2.08    | 10       | v_Gunn |
+| 2020 | g    | 22.76    | 0.08    | 70       | g_Gunn |
+| 2020 | R    | 23.45    | 0.03    | 335      | r_Gunn |
+| 2020 | i    | 23.41    | 0.03    | 12       | i_Gunn |
+| 2021 | B    | 22.47    | 0.25    | 74       | B_Cousins |
+| 2021 | V    | 23.76    | 0.20    | 74       | V_Cousins |
+| 2021 | g    | 22.21    | 0.24    | 59       | g_Gunn |
+| 2021 | R    | 22.93    | 0.47    | 264      | r_Gunn |
+| 2021 | i    | 23.10    | 0.09    | 28       | i_Gunn |
+| 2023 | B    | 23.41    | 0.06    | 60       | B_cousins |
+| 2023 | V    | 24.46    | 0.03    | 31       | V_cousins |
+| 2023 | g    | 23.25    | 0.05    | 43       | g |
+| 2023 | R    | 23.72    | 0.10    | 182      | r |
+| 2024 | V    | 24.30    | 0.01    | 5        | V |
+| 2024 | g    | 23.10    | 0.05    | 127      | G |
+| 2024 | R    | 24.25    | 0.05    | 331      | R |
+| 2025 | B    | 23.15    | 0.49    | 47       | B |
+| 2025 | V    | 24.12    | 0.30    | 45       | V |
+| 2025 | g    | 22.53    | 0.03    | 23       | G |
+| 2025 | R    | 24.10    | 0.07    | 144      | R |
 
-### T120
+**Total: 2,349/2,535 T120 frames calibrated (93%).**  Uncalibrated frames are
+narrowband (Hα, SII, OIII) which have no PS1 equivalent.
 
-| Year | Filter | ZP (mag) | Scatter (MAD) | N frames |
-|------|--------|----------|---------------|----------|
-| 2023 | g      | 23.2     | 1.1           | 41       |
-| 2023 | r      | 23.7     | 1.1           | 91       |
-| 2024 | V      | 25.1     | 0.2           | 5        |
-| 2024 | R      | 24.2     | 1.4           | 198      |
-| 2024 | g      | 23.9     | 1.2           | 93       |
-| 2025 | B      | 25.3     | 1.7           | 37       |
-| 2025 | V      | 25.9     | 1.4           | 40       |
-| 2025 | R      | 25.0     | 1.5           | 112      |
-| 2025 | g      | 24.7     | 1.9           | 24       |
+### T080 (legacy astrometry — treat with caution)
 
-### Years with no zero points
+| Year | Band | ZP (mag) | σ (mag) | N frames |
+|------|------|----------|---------|----------|
+| 2019 | g    | 21.90    | 0.64    | 135      |
+| 2019 | R    | 22.05    | 0.87    | 138      |
+| 2019 | i    | 23.08    | 0.17    | 2        |
+| 2023 | g    | 22.32    | 0.93    | 3        |
+| 2023 | R    | 24.56    | 0.97    | 3        |
+| 2023 | i    | 22.19    | 0.32    | 3        |
+| 2024 | g    | 21.51    | 2.52    | 4        |
+| 2024 | R    | 19.98    | 0.79    | 4        |
+| 2024 | i    | 21.18    | 1.03    | 7        |
+| 2025 | g    | 20.66    | 0.85    | 37       |
+| 2025 | R    | 21.35    | 1.19    | 35       |
+| 2025 | i    | 21.20    | 1.25    | 24       |
 
-- **2018**: T080 used Clear filter (no PS1 match); T120 used B/R/V/Halpha.
-- **2020**: T120 used B/R/V/g/Halpha/i, but only 30/583 frames had WCS
-  solutions and those were in non-PS1 bands.
-- **2021**: T120 used B/R/V/g/Halpha/i, but no photometry matches despite
-  having WCS for 447 frames.
-- **2022**: No reduced frames at all.
+T080 ZPs have large scatter partly due to unreliable WCS (pending
+solve-field reprocessing).
 
-The ~1–2 mag year-to-year variation is consistent with non-photometric
-conditions. The 2023 T080 r' ZP = 24.6 is anomalous (3 frames only). These
-values are suitable for order-of-magnitude flux estimates only.
+### Notes
+
+- **2018 T120 is anomalous**: R-band ZP=20.8 with σ=1.8, ~3 mag fainter than
+  other years.  Only 34 frames; likely a different gain setting.
+- **2022**: No reduced frames (all 1×1 binned).
+- Year-to-year T120 R-band ZP variation (~1 mag) likely reflects real
+  instrumental changes (mirror recoating, CCD replacement) plus the mix of
+  photometric and non-photometric conditions.
 
 ## PSF Models
 
@@ -146,15 +175,15 @@ SExtractor's inability to handle accented characters in file paths.
 
 ## Known Issues
 
-1. **2022 binning mismatch** — All science frames at 1x1 binning. Requires
-   adding a 1x1 expected shape to config.py or separate processing.
+1. **2022 binning mismatch** — All science frames at 1×1 binning. Requires
+   adding a 1×1 expected shape to config.py or separate processing.
 2. **French directory names (2019 T120)** — "Deuxième nuit", "Première nuit",
    "Troisième nuit" break SExtractor. Fix: rename directories or quote paths
    in the SExtractor subprocess call.
-3. **Unresolvable object names** — Student-chosen names in 2020, 2023, 2024
-   cannot be resolved by Simbad. Fix: add a manual coordinate lookup table
-   for known student targets.
-4. **2021 T080** — Raw frames exist but were all skipped during reduction
+3. **2021 T080** — Raw frames exist but were all skipped during reduction
    (shape mismatch). Needs investigation.
-5. **2024 T120 astrometry** — 0% solve rate despite 763 reduced frames.
-   Median RMS 12.3" suggests systematic pointing error. Needs investigation.
+4. **T080 astrometry** — Still using legacy Gaia cross-matching solver with
+   ~2" RMS. Needs reprocessing with solve-field once index-4203 tiles
+   (5.5–8' features) are downloaded for all healpix positions.
+5. **No colour terms** — B and V ZPs are calibrated against PS1 g-band
+   without colour correction. SCAMP refinement planned as next step.
