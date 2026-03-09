@@ -83,6 +83,12 @@ PHOT_FILTER_TO_PS1 = {
     "r'": "rmag", "r": "rmag", "R": "rmag",
     "i'": "imag", "i": "imag",
     "V": "gmag", "B": "gmag",
+    # Cousins system (2018-2019, 2021, 2023)
+    "R_Cousins": "rmag", "R Cousins": "rmag",
+    "B_Cousins": "gmag", "B Cousins": "gmag", "B_cousins": "gmag",
+    "V_Cousins": "gmag", "V_cousins": "gmag",
+    # Gunn system (2020-2021)
+    "r_Gunn": "rmag", "g_Gunn": "gmag", "i_Gunn": "imag", "v_Gunn": "gmag",
 }
 
 # ── PSF (SExtractor + PSFex) ───────────────────────────────────────────
@@ -94,6 +100,9 @@ PSF_DETECT_THRESH = 5.0
 PSF_MIN_SOURCES = 20
 PSF_SAMPLE_MINSN = 20
 PSF_SAMPLE_MAXELLIP = 0.3
+
+# ── Stacking (SWarp) ────────────────────────────────────────────────────
+SWARP_CMD = "/Users/hjmcc/opt/astromatic/bin/swarp"
 
 # ── Pipeline metadata ────────────────────────────────────────────────────
 PIPELINE_NAME = "OHP-M2-v1"

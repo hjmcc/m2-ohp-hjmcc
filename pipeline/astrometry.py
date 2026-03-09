@@ -1,8 +1,7 @@
-"""Astrometric calibration: WCS solutions via Gaia DR3 cross-matching.
+"""Astrometric calibration via astrometry.net solve-field + Gaia DR3 validation.
 
-Primary solver: sep extraction → Gaia cone search → cKDTree cross-match →
-least-squares WCS fit. Uses astroalign for T080 (unknown rotation).
-Fallback: astrometry.net solve-field if available.
+Primary solver: astrometry.net solve-field (blind plate solving).
+Post-solve: sep extraction → Gaia cross-match to compute RMS.
 """
 
 import csv
@@ -390,7 +389,8 @@ def cross_match(src_xy, cat_xy, tolerance_px):
 
 # ── WCS fitting ──────────────────────────────────────────────────────────
 
-def fit_wcs(src_xy, cat_radec, wcs_init, image_shape, crval_only=False):
+def fit_wcs(src_xy, cat_radec, wcs_init, image_shape, crval_only=False,
+            telescope=None):
     """Fit WCS via least squares.
 
     Parameters
@@ -402,6 +402,10 @@ def fit_wcs(src_xy, cat_radec, wcs_init, image_shape, crval_only=False):
     crval_only : bool
         If True, fit only CRVAL (2 params), keeping CD matrix fixed.
         More robust with few or noisy matches.
+    telescope : str or None
+        If given, fix pixel scale from config and fit only CRVAL + rotation
+        (3 params) instead of full 6-param CD fit. No distortion in these
+        small fields of view.
 
     Returns
     -------
@@ -421,6 +425,29 @@ def fit_wcs(src_xy, cat_radec, wcs_init, image_shape, crval_only=False):
             w.wcs.crpix = crpix
             w.wcs.crval = [params[0], params[1]]
             w.wcs.cd = cd
+            sky = w.all_pix2world(src_xy, 0)
+            cos_d = np.cos(np.radians(cat_radec[:, 1]))
+            dra = (sky[:, 0] - cat_radec[:, 0]) * cos_d * 3600.0
+            ddec = (sky[:, 1] - cat_radec[:, 1]) * 3600.0
+            return np.concatenate([dra, ddec])
+    elif telescope is not None:
+        # 3-param fit: CRVAL1, CRVAL2, rotation — pixel scale fixed
+        tel_cfg = config.TELESCOPES[telescope]
+        scale_deg = tel_cfg["pixel_scale"] / 3600.0
+        flipped = config.ASTROM_FLIPPED_PARITY.get(telescope, False)
+        # Recover current rotation from CD matrix
+        if flipped:
+            rot0 = np.degrees(np.arctan2(cd[1, 0], cd[0, 0]))
+        else:
+            rot0 = np.degrees(np.arctan2(cd[1, 0], -cd[0, 0]))
+        p0 = np.array([crval[0], crval[1], rot0])
+
+        def residuals(params):
+            w = WCS(naxis=2)
+            w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+            w.wcs.crpix = crpix
+            w.wcs.crval = [params[0], params[1]]
+            w.wcs.cd = _build_cd_matrix(scale_deg, params[2], flipped)
             sky = w.all_pix2world(src_xy, 0)
             cos_d = np.cos(np.radians(cat_radec[:, 1]))
             dra = (sky[:, 0] - cat_radec[:, 0]) * cos_d * 3600.0
@@ -457,6 +484,12 @@ def fit_wcs(src_xy, cat_radec, wcs_init, image_shape, crval_only=False):
     if crval_only:
         w.wcs.crval = [p[0], p[1]]
         w.wcs.cd = cd
+    elif telescope is not None:
+        w.wcs.crval = [p[0], p[1]]
+        tel_cfg = config.TELESCOPES[telescope]
+        scale_deg = tel_cfg["pixel_scale"] / 3600.0
+        flipped = config.ASTROM_FLIPPED_PARITY.get(telescope, False)
+        w.wcs.cd = _build_cd_matrix(scale_deg, p[2], flipped)
     else:
         w.wcs.crval = [p[0], p[1]]
         w.wcs.cd = np.array([[p[2], p[3]], [p[4], p[5]]])
@@ -475,9 +508,161 @@ def compute_rms(wcs, src_xy, cat_radec):
     return float(np.sqrt(np.mean(dra**2 + ddec**2)))
 
 
-# ── Iterative solver ────────────────────────────────────────────────────
+# ── solve-field primary solver ──────────────────────────────────────────
 
-def solve_frame_iterative(data, header, telescope, wcs_init, gaia_stars):
+def solve_frame_solvefield(filepath, telescope, center=None):
+    """Solve a frame using astrometry.net solve-field.
+
+    Parameters
+    ----------
+    filepath : Path
+        Path to FITS file.
+    telescope : str
+    center : SkyCoord or None
+        Approximate pointing for faster solving.
+
+    Returns
+    -------
+    result dict with status, wcs, etc.
+    """
+    if shutil.which("solve-field") is None:
+        return _fail("no_solvefield")
+
+    tel = config.TELESCOPES[telescope]
+    pixel_scale = tel["pixel_scale"]
+    scale_lo = 0.6 * pixel_scale
+    scale_hi = 1.4 * pixel_scale
+
+    cmd = [
+        "solve-field",
+        "--scale-low", str(scale_lo),
+        "--scale-high", str(scale_hi),
+        "--scale-units", "arcsecperpix",
+        "--downsample", "2",
+        "--no-plots",
+        "--no-verify",          # don't trust existing WCS
+        "--overwrite",
+        "--cpulimit", "120",
+    ]
+
+    if center is not None:
+        cmd += [
+            "--ra", str(center.ra.deg),
+            "--dec", str(center.dec.deg),
+            "--radius", "5",    # 5° search radius for pointing errors
+        ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cmd += ["--dir", tmpdir, str(filepath)]
+
+        log.debug("solve-field: %s", " ".join(cmd))
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=180)
+        except subprocess.TimeoutExpired:
+            return _fail("solvefield_timeout")
+        except Exception as exc:
+            log.warning("solve-field error: %s", exc)
+            return _fail("solvefield_error")
+
+        # Check for solution
+        solved_file = Path(tmpdir) / (Path(filepath).stem + ".solved")
+        if not solved_file.exists():
+            log.debug("solve-field did not solve: %s",
+                      proc.stderr[-500:] if proc.stderr else "")
+            return _fail("solvefield_failed")
+
+        # Read WCS from the .wcs file
+        wcs_file = Path(tmpdir) / (Path(filepath).stem + ".wcs")
+        if not wcs_file.exists():
+            return _fail("solvefield_no_wcs")
+
+        try:
+            wcs = WCS(fits.getheader(str(wcs_file)))
+        except Exception as exc:
+            log.warning("Failed to read solve-field WCS: %s", exc)
+            return _fail("solvefield_parse_error")
+
+    cd = wcs.wcs.cd
+    scale = np.sqrt(cd[0, 0]**2 + cd[1, 0]**2) * 3600.0
+    rotation = np.degrees(np.arctan2(cd[0, 1], cd[0, 0]))
+
+    return {
+        "status": "OK",
+        "wcs": wcs,
+        "n_detected": 0,
+        "n_gaia": 0,
+        "n_matched": 0,
+        "rms_arcsec": 0.0,
+        "crval1": round(wcs.wcs.crval[0], 6),
+        "crval2": round(wcs.wcs.crval[1], 6),
+        "rotation_deg": round(rotation, 2),
+        "pixel_scale": round(scale, 4),
+        "fail_reason": None,
+    }
+
+
+def validate_with_gaia(filepath, wcs, telescope, gaia_cache_dir):
+    """Cross-match solve-field WCS with Gaia DR3 to compute RMS.
+
+    Updates the result dict with n_matched, rms_arcsec, n_gaia.
+    Returns (n_matched, rms_arcsec, n_gaia).
+    """
+    # Read data and extract sources
+    data = fits.getdata(str(filepath)).astype(np.float64)
+    if not data.flags["C_CONTIGUOUS"]:
+        data = np.ascontiguousarray(data)
+
+    sources = extract_sources(data, telescope)
+    if len(sources) < 3:
+        return 0, None, 0
+
+    # Get Gaia stars around the solved center
+    ny, nx = data.shape
+    center_sky = wcs.pixel_to_world(nx / 2.0, ny / 2.0)
+    center = SkyCoord(ra=center_sky.ra, dec=center_sky.dec)
+    gaia_stars = get_gaia_stars(center, telescope, gaia_cache_dir)
+    n_gaia = len(gaia_stars)
+    if n_gaia < 3:
+        return 0, None, n_gaia
+
+    # Project sources to sky, cross-match with Gaia
+    src_sky = wcs.pixel_to_world(sources["x"], sources["y"])
+    src_ra = np.array(src_sky.ra.deg)
+    src_dec = np.array(src_sky.dec.deg)
+
+    cat_ra = np.array([s["ra"] for s in gaia_stars])
+    cat_dec = np.array([s["dec"] for s in gaia_stars])
+
+    # Cross-match in sky coordinates (2" tolerance)
+    cos_dec = np.cos(np.radians(np.mean(src_dec)))
+    tree = cKDTree(np.column_stack([cat_ra * cos_dec, cat_dec]))
+    src_pts = np.column_stack([src_ra * cos_dec, src_dec])
+    match_rad = 2.0 / 3600.0  # 2 arcsec
+    dists, idxs = tree.query(src_pts, distance_upper_bound=match_rad)
+    matched = np.isfinite(dists)
+    n_matched = int(np.sum(matched))
+
+    if n_matched < 3:
+        return n_matched, None, n_gaia
+
+    # Compute RMS
+    matched_src_ra = src_ra[matched]
+    matched_src_dec = src_dec[matched]
+    matched_cat_ra = cat_ra[idxs[matched]]
+    matched_cat_dec = cat_dec[idxs[matched]]
+
+    cos_d = np.cos(np.radians(matched_cat_dec))
+    dra = (matched_src_ra - matched_cat_ra) * cos_d * 3600.0
+    ddec = (matched_src_dec - matched_cat_dec) * 3600.0
+    rms = float(np.sqrt(np.mean(dra**2 + ddec**2)))
+
+    return n_matched, round(rms, 3), n_gaia
+
+
+# ── Legacy: Iterative solver (kept for reference) ─────────────────────
+
+def _solve_frame_iterative_UNUSED(data, header, telescope, wcs_init, gaia_stars):
     """Iteratively refine WCS via cross-matching with Gaia.
 
     Returns dict with status, wcs, rms_arcsec, n_matched, etc.
@@ -636,7 +821,7 @@ def solve_frame_iterative(data, header, telescope, wcs_init, gaia_stars):
             wcs_new.wcs.radesys = "ICRS"
         else:
             wcs_new = fit_wcs(matched_src, matched_cat, wcs_current,
-                              image_shape)
+                              image_shape, telescope=telescope)
         if wcs_new is None:
             continue
 
@@ -661,7 +846,8 @@ def solve_frame_iterative(data, header, telescope, wcs_init, gaia_stars):
             matched_cat = matched_cat[good]
             n_matched = len(matched_src)
 
-            wcs_clip = fit_wcs(matched_src, matched_cat, wcs_new, image_shape)
+            wcs_clip = fit_wcs(matched_src, matched_cat, wcs_new, image_shape,
+                              telescope=telescope)
             if wcs_clip is not None:
                 wcs_new = wcs_clip
                 rms_new = compute_rms(wcs_new, matched_src, matched_cat)
@@ -830,73 +1016,11 @@ def solve_frame_astroalign(data, header, telescope, center, gaia_stars):
     return solve_frame_iterative(data, header, telescope, wcs_init, gaia_stars)
 
 
-# ── solve-field fallback ─────────────────────────────────────────────────
-
-def solve_frame_solvefield(filepath, telescope, center, pixel_scale):
-    """Fallback solver using astrometry.net solve-field.
-
-    Returns result dict or FAILED if solve-field not installed / fails.
-    """
-    if shutil.which("solve-field") is None:
-        return _fail("no_solvefield")
-
-    ra = center.ra.deg
-    dec = center.dec.deg
-    scale_lo = 0.8 * pixel_scale
-    scale_hi = 1.2 * pixel_scale
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        cmd = [
-            "solve-field",
-            "--ra", str(ra),
-            "--dec", str(dec),
-            "--radius", "1",
-            "--scale-low", str(scale_lo),
-            "--scale-high", str(scale_hi),
-            "--scale-units", "arcsecperpix",
-            "--no-plots",
-            "--overwrite",
-            "--dir", tmpdir,
-            str(filepath),
-        ]
-
-        log.debug("solve-field: %s", " ".join(cmd))
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        except subprocess.TimeoutExpired:
-            return _fail("solvefield_timeout")
-        except Exception as exc:
-            log.warning("solve-field error: %s", exc)
-            return _fail("solvefield_error")
-
-        if proc.returncode != 0:
-            log.debug("solve-field stderr: %s", proc.stderr[-500:] if proc.stderr else "")
-            return _fail("solvefield_failed")
-
-        # Find the .wcs file
-        wcs_files = list(Path(tmpdir).glob("*.wcs"))
-        if not wcs_files:
-            return _fail("solvefield_no_wcs")
-
-        try:
-            wcs = WCS(fits.getheader(str(wcs_files[0])))
-        except Exception as exc:
-            log.warning("Failed to read solve-field WCS: %s", exc)
-            return _fail("solvefield_parse_error")
-
-    # Read the frame to compute RMS vs Gaia
-    hdr = fits.getheader(str(filepath))
-    n_detected = 0  # we don't have extraction info from solve-field
-
-    return _result("OK", wcs, n_detected, 0, 0, 0.0)
-
-
 # ── Per-frame orchestrator ──────────────────────────────────────────────
 
 def solve_frame(filepath, telescope, simbad_cache, gaia_cache_dir,
-                force=False, known_coords=None, known_rotation=None,
-                reference_wcs=None):
-    """Solve one frame: extract → match → fit → write WCS.
+                force=False, known_coords=None, **kwargs):
+    """Solve one frame via solve-field + Gaia RMS validation.
 
     Parameters
     ----------
@@ -907,12 +1031,7 @@ def solve_frame(filepath, telescope, simbad_cache, gaia_cache_dir,
     force : bool
         Re-solve even if WCS already present.
     known_coords : SkyCoord or None
-        Pre-resolved coordinates (e.g. median from other frames of same object).
-    known_rotation : float or None
-        Previously determined rotation for this object (T080).
-    reference_wcs : WCS or None
-        WCS from a successfully solved neighboring frame of the same object.
-        Used as initial WCS (bypasses header pointing and vote pre-alignment).
+        Pre-resolved coordinates for faster solving.
 
     Returns
     -------
@@ -922,77 +1041,38 @@ def solve_frame(filepath, telescope, simbad_cache, gaia_cache_dir,
     hdr = fits.getheader(str(filepath))
 
     # Check if already solved
-    if not force and hdr.get("CTYPE1") == "RA---TAN":
+    if not force and hdr.get("ASTRSTAT") in ("OK", "HIGH_RMS"):
         return {"status": "SKIPPED", "filename": filepath.name,
                 "fail_reason": None}
 
-    data = fits.getdata(str(filepath)).astype(np.float64)
-    if not data.flags["C_CONTIGUOUS"]:
-        data = np.ascontiguousarray(data)
-
     object_name = hdr.get("OBJECT", "")
 
-    # ── Get initial WCS ──────────────────────────────────────────────
-    # Priority: reference_wcs > header pointing > name resolution
-    if reference_wcs is not None:
-        wcs_init = reference_wcs
-        center = SkyCoord(ra=wcs_init.wcs.crval[0], dec=wcs_init.wcs.crval[1],
-                          unit="deg")
-    else:
+    # ── Get approximate center for solve-field hint ──────────────────
+    center = known_coords
+    if center is None:
         wcs_init = get_initial_wcs(hdr, telescope)
-
         if wcs_init is not None:
             center = SkyCoord(ra=wcs_init.wcs.crval[0],
                               dec=wcs_init.wcs.crval[1], unit="deg")
-        elif known_coords is not None:
-            center = known_coords
-        else:
-            center = resolve_object_coords(object_name, simbad_cache)
-
     if center is None:
-        return _make_frame_result(filepath, hdr,
-                                  _fail("no_pointing"))
+        center = resolve_object_coords(object_name, simbad_cache)
+    # center=None is OK — solve-field will do a blind solve (slower)
 
-    # ── Query Gaia ───────────────────────────────────────────────────
-    gaia_stars = get_gaia_stars(center, telescope, gaia_cache_dir)
-    if len(gaia_stars) < config.ASTROM_MIN_MATCHES:
-        return _make_frame_result(filepath, hdr,
-                                  _fail("sparse_field", n_gaia=len(gaia_stars)))
+    # ── Primary solve: astrometry.net solve-field ────────────────────
+    result = solve_frame_solvefield(filepath, telescope, center=center)
 
-    # ── Solve ────────────────────────────────────────────────────────
-    # If no WCS from header but we have center coords, build one from
-    # known rotation (config or cached from previous frame).
-    if wcs_init is None and center is not None:
-        rot = known_rotation
-        if rot is None:
-            rot = config.ASTROM_KNOWN_ROTATION.get(telescope)
-        if rot is not None:
-            tel = config.TELESCOPES[telescope]
-            ny = hdr.get("NAXIS2", tel["expected_shape"][0])
-            nx = hdr.get("NAXIS1", tel["expected_shape"][1])
-            flipped = config.ASTROM_FLIPPED_PARITY.get(telescope, False)
-            wcs_init = _build_wcs(
-                [center.ra.deg, center.dec.deg],
-                [nx / 2.0 + 0.5, ny / 2.0 + 0.5],
-                tel["pixel_scale"] / 3600.0, rot, flipped,
-            )
-
-    if wcs_init is not None:
-        result = solve_frame_iterative(data, hdr, telescope, wcs_init, gaia_stars)
-    else:
-        # No rotation info at all: try astroalign
-        result = solve_frame_astroalign(data, hdr, telescope, center, gaia_stars)
-
-    # ── Fallback: solve-field ────────────────────────────────────────
-    if result["status"] == "FAILED":
-        log.info("Primary solver failed (%s), trying solve-field fallback",
-                 result["fail_reason"])
-        sf_result = solve_frame_solvefield(
-            filepath, telescope, center,
-            config.TELESCOPES[telescope]["pixel_scale"],
-        )
-        if sf_result["status"] != "FAILED":
-            result = sf_result
+    # ── Validate with Gaia cross-match ───────────────────────────────
+    if result["wcs"] is not None:
+        n_matched, rms, n_gaia = validate_with_gaia(
+            filepath, result["wcs"], telescope, gaia_cache_dir)
+        result["n_matched"] = n_matched
+        result["n_gaia"] = n_gaia
+        if rms is not None:
+            result["rms_arcsec"] = rms
+            if rms > config.ASTROM_MAX_RMS_ARCSEC:
+                result["status"] = "HIGH_RMS"
+            elif rms > config.ASTROM_WARN_RMS_ARCSEC:
+                result["status"] = "HIGH_RMS"
 
     # ── Write WCS to FITS header ─────────────────────────────────────
     if result["wcs"] is not None:
@@ -1076,7 +1156,8 @@ def _make_exception_result(fpath, obj, hdr, exc):
 def run_astrometry(year, telescope, force=False):
     """Run astrometric calibration on all reduced frames.
 
-    Walks reduced/{night}/ for FITS files, solves each, writes reports.
+    Uses astrometry.net solve-field as primary solver, then validates
+    with Gaia DR3 cross-match for RMS.
     """
     base = config.DATA_ROOT / year / telescope
     reduced_dir = base / "reduced"
@@ -1085,6 +1166,11 @@ def run_astrometry(year, telescope, force=False):
 
     if not reduced_dir.exists():
         log.warning("No reduced directory: %s", reduced_dir)
+        return
+
+    if shutil.which("solve-field") is None:
+        log.error("solve-field not found on PATH — install astrometry.net")
+        print("  ERROR: solve-field not found. Install astrometry.net.")
         return
 
     # Load simbad cache
@@ -1099,17 +1185,16 @@ def run_astrometry(year, telescope, force=False):
         log.warning("No reduced FITS files in %s", reduced_dir)
         return
 
-    print(f"\n  {telescope}: astrometric calibration for {len(fits_files)} frames")
+    print(f"\n  {telescope}: astrometric calibration for {len(fits_files)} frames"
+          f" (solve-field)")
 
     # ── Pre-compute per-object coordinates ───────────────────────────
-    # Group files by object, compute median coords from frames that have them
     object_files = {}
     for fpath in fits_files:
         hdr = fits.getheader(str(fpath))
         obj = hdr.get("OBJECT", "unknown")
         object_files.setdefault(obj, []).append((fpath, hdr))
 
-    # Median RA/Dec per object from frames with OBJCTRA
     object_coords = {}
     for obj, file_hdrs in object_files.items():
         ras, decs = [], []
@@ -1126,145 +1211,67 @@ def run_astrometry(year, telescope, force=False):
             object_coords[obj] = SkyCoord(
                 ra=np.median(ras), dec=np.median(decs), unit="deg")
         else:
-            # Try name resolution
             coord = resolve_object_coords(obj, simbad_cache)
             if coord is not None:
                 object_coords[obj] = coord
                 log.info("Resolved '%s' → RA=%.4f Dec=%.4f",
                          obj, coord.ra.deg, coord.dec.deg)
 
-    # ── Pass 1: Solve all frames ────────────────────────────────────
-    results = {}  # keyed by filepath for easy update in pass 2
-    result_list = []  # ordered list for reporting
-    # Track rotation per object for T080 (reuse once found)
-    object_rotation = {}
-    # Track successful WCS per object for pass 2
-    object_wcs = {}  # obj → WCS (from first successful solve)
+    # ── Solve all frames ─────────────────────────────────────────────
+    results = []
 
     for i, fpath in enumerate(fits_files, 1):
         hdr = fits.getheader(str(fpath))
         obj = hdr.get("OBJECT", "unknown")
         known_coords = object_coords.get(obj)
-        known_rot = object_rotation.get(obj)
 
         log.info("[%d/%d] %s", i, len(fits_files), fpath.name)
         try:
             result = solve_frame(
                 fpath, telescope, simbad_cache, gaia_cache_dir,
                 force=force, known_coords=known_coords,
-                known_rotation=known_rot,
             )
         except Exception as exc:
             log.error("EXCEPTION solving %s: %s", fpath.name, exc)
             result = _make_exception_result(fpath, obj, hdr, exc)
 
-        results[str(fpath)] = result
-        result_list.append(result)
-
-        # Cache rotation and WCS for T080/pass 2 on success
-        if result.get("status") in ("OK", "HIGH_RMS"):
-            if (result.get("rotation_deg") is not None
-                    and obj not in object_rotation):
-                object_rotation[obj] = result["rotation_deg"]
-                log.info("Cached rotation for %s: %.1f°", obj,
-                         result["rotation_deg"])
-            if obj not in object_wcs and result.get("crval1") is not None:
-                # Reconstruct WCS from result for pass 2
-                ref_wcs = _wcs_from_result(result, hdr, telescope)
-                if ref_wcs is not None:
-                    object_wcs[obj] = ref_wcs
+        results.append(result)
 
         status = result.get("status", "?")
         rms = result.get("rms_arcsec")
         rms_str = f"{rms:.3f}″" if rms is not None else "—"
         nm = result.get("n_matched", 0)
 
-        if i % 20 == 0 or status == "FAILED":
+        if i % 10 == 0 or status == "FAILED":
+            n_ok = sum(1 for r in results if r.get("status") in ("OK", "HIGH_RMS"))
             print(f"    [{i}/{len(fits_files)}] {fpath.name}: "
-                  f"{status} (matched={nm}, RMS={rms_str})")
-
-    # ── Pass 2: Retry failures using reference WCS from neighbors ───
-    failed = [(fpath, r) for fpath, r in results.items()
-              if r.get("status") == "FAILED"]
-    if failed and object_wcs:
-        n_retry = sum(1 for fp, r in failed
-                      if r.get("object", "") in object_wcs)
-        if n_retry > 0:
-            print(f"\n    Pass 2: retrying {n_retry} failures "
-                  f"with reference WCS from neighbors")
-
-        for fp_str, old_result in failed:
-            fpath = Path(fp_str)
-            obj = old_result.get("object", "")
-            ref_wcs = object_wcs.get(obj)
-            if ref_wcs is None:
-                continue
-
-            hdr = fits.getheader(str(fpath))
-            known_rot = object_rotation.get(obj)
-            known_coords = object_coords.get(obj)
-
-            log.info("[pass2] %s (using ref WCS from %s)", fpath.name, obj)
-            try:
-                result = solve_frame(
-                    fpath, telescope, simbad_cache, gaia_cache_dir,
-                    force=True, known_coords=known_coords,
-                    known_rotation=known_rot,
-                    reference_wcs=ref_wcs,
-                )
-            except Exception as exc:
-                log.error("EXCEPTION in pass 2 for %s: %s", fpath.name, exc)
-                continue
-
-            if result.get("status") in ("OK", "HIGH_RMS"):
-                results[fp_str] = result
-                # Update result_list
-                for idx, r in enumerate(result_list):
-                    if r.get("filename") == fpath.name and \
-                       r.get("night") == fpath.parent.name:
-                        result_list[idx] = result
-                        break
-                rms = result.get("rms_arcsec")
-                log.info("[pass2] %s → %s (RMS=%.3f″, matched=%d)",
-                         fpath.name, result["status"], rms or 0,
-                         result.get("n_matched", 0))
-
-        n_recovered = sum(1 for fp, r in results.items()
-                          if r.get("status") in ("OK", "HIGH_RMS")) - \
-                       sum(1 for r in result_list
-                           if r.get("status") in ("OK", "HIGH_RMS"))
-        # Recount from results dict
-        n_solved_pass2 = sum(1 for r in results.values()
-                             if r.get("status") in ("OK", "HIGH_RMS"))
-        n_solved_pass1 = sum(1 for r in result_list
-                             if r.get("status") in ("OK", "HIGH_RMS"))
-        if n_solved_pass2 > n_solved_pass1:
-            print(f"    Pass 2 recovered {n_solved_pass2 - n_solved_pass1} "
-                  f"additional frames")
-
-    # Use updated results for reporting
-    final_results = list(results.values())
+                  f"{status} (matched={nm}, RMS={rms_str})  "
+                  f"[{n_ok} solved so far]")
 
     # ── Write reports ────────────────────────────────────────────────
     astrom_dir.mkdir(parents=True, exist_ok=True)
 
     json_out = astrom_dir / "astrom_report.json"
     with open(json_out, "w") as f:
-        json.dump(final_results, f, indent=2, default=str)
+        json.dump(results, f, indent=2, default=str)
     log.info("Wrote %s", json_out)
 
     csv_out = astrom_dir / "astrom_report.csv"
-    if final_results:
-        fieldnames = [k for k in final_results[0].keys() if k != "wcs"]
+    if results:
+        fieldnames = [k for k in results[0].keys() if k != "wcs"]
+        for r in results:
+            for k in r:
+                if k not in fieldnames and k != "wcs":
+                    fieldnames.append(k)
         with open(csv_out, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            for row in final_results:
+            for row in results:
                 writer.writerow({k: row.get(k, "") for k in fieldnames})
         log.info("Wrote %s", csv_out)
 
     # ── Summary ──────────────────────────────────────────────────────
-    _print_summary(final_results, telescope)
+    _print_summary(results, telescope)
 
 
 def _print_summary(results, telescope):
