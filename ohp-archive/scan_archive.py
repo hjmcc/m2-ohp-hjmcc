@@ -37,6 +37,10 @@ HTML_PATH = OUTPUT_DIR / "archive_summary.html"
 WEB_HTML_PATH = OUTPUT_DIR / "ohp-m2-archive.html"
 DOCS_DIR = OUTPUT_DIR.parent / "docs"
 WEB_BASE_URL = "https://ohp.ias.universite-paris-saclay.fr/archive/"
+# Local directory names that differ from the remote archive server
+RUN_NAME_MAP = {
+    "202503OHP1_M2": "202503OHP_M2",
+}
 SIMBAD_CACHE = OUTPUT_DIR / "simbad_cache.json"
 
 FITS_EXT = {".fits", ".fit"}
@@ -1329,6 +1333,40 @@ footer {
 .file-panel-inner td { padding: 2px 8px; color: var(--text); }
 .file-panel-inner tr:hover td { background: rgba(88,166,255,0.06); }
 .file-panel-inner .fp-path { user-select: all; }
+.fp-toolbar {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 6px; padding: 4px 0;
+}
+.fp-toolbar label { font-size: 0.85em; color: var(--text-dim); cursor: pointer; user-select: none; }
+.fp-toolbar label input { margin-right: 4px; vertical-align: middle; }
+.fp-toolbar .fp-sel-count { font-size: 0.82em; color: var(--text-dim); }
+.fp-toolbar button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: 4px 12px; font-size: 0.82em; font-weight: 600; cursor: pointer;
+}
+.fp-toolbar button:disabled { opacity: 0.4; cursor: default; }
+.fp-toolbar button:hover:not(:disabled) { opacity: 0.85; }
+.fp-cb { width: 15px; text-align: center; }
+.fp-cb input { cursor: pointer; }
+.dl-modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center;
+}
+.dl-modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 20px; max-width: 700px; width: 90%; max-height: 80vh; display: flex; flex-direction: column;
+}
+.dl-modal h3 { margin: 0 0 8px; color: var(--text); font-size: 1em; }
+.dl-modal textarea {
+  width: 100%; height: 300px; background: var(--bg); color: var(--green); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px; font-family: var(--mono); font-size: 0.82em;
+  resize: vertical; white-space: pre; overflow-wrap: normal; overflow-x: auto;
+}
+.dl-modal .dl-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+.dl-modal .dl-actions button {
+  background: var(--accent); color: #fff; border: none; border-radius: 4px;
+  padding: 6px 16px; font-size: 0.85em; font-weight: 600; cursor: pointer;
+}
+.dl-modal .dl-actions button.dl-close { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 
 /* Calibration inventory */
 .cal-details { margin-top: 12px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -1578,17 +1616,27 @@ function showFiles(el) {
   // Calibration summary at top
   const calSummary = getCalSummary(obj, year);
 
-  let html = calSummary + '<div class="file-panel-inner"><table><thead><tr>' +
-    '<th>Filename</th><th>Date</th><th>Telescope</th><th>Filter</th><th>Exposure</th><th>Path</th>' +
+  // Filter files by year
+  const filtered = files.filter(f => !(year && f.date && !f.date.startsWith(year)));
+
+  const cbCol = WEB_MODE ? '<th class="fp-cb"><input type="checkbox" title="Select all" onchange="toggleFileCheckboxes(this)"></th>' : '';
+  const toolbar = WEB_MODE
+    ? '<div class="fp-toolbar"><label><input type="checkbox" onchange="toggleFileCheckboxes(this)"> Select all</label>' +
+      '<span class="fp-sel-count"></span>' +
+      '<button onclick="generateScript(this)" disabled>Download script</button></div>'
+    : '';
+
+  let html = calSummary + '<div class="file-panel-inner">' + toolbar + '<table><thead><tr>' +
+    cbCol + '<th>Filename</th><th>Date</th><th>Telescope</th><th>Filter</th><th>Exposure</th><th>Path</th>' +
     '</tr></thead><tbody>';
-  for (const f of files) {
-    if (year && f.date && !f.date.startsWith(year)) continue;
+  for (const f of filtered) {
     const exp = parseFloat(f.exptime);
     const expStr = isNaN(exp) ? f.exptime : (exp >= 3600 ? (exp/3600).toFixed(1)+'h' : exp >= 60 ? (exp/60).toFixed(1)+'m' : exp+'s');
     const pathCell = WEB_MODE
       ? '<td class="fp-path"><a href="' + esc(f.path) + '" download>' + esc(f.path) + '</a></td>'
       : '<td class="fp-path">' + esc(f.path) + '</td>';
-    html += '<tr>' +
+    const cb = WEB_MODE ? '<td class="fp-cb"><input type="checkbox" data-url="' + esc(f.path) + '" onchange="updateSelCount(this)"></td>' : '';
+    html += '<tr>' + cb +
       '<td>' + esc(f.filename) + '</td>' +
       '<td>' + esc(f.date) + '</td>' +
       '<td>' + esc(f.telescope) + '</td>' +
@@ -1639,8 +1687,15 @@ function showCalFiles(el) {
   const td = document.createElement('td');
   td.colSpan = cols;
 
-  let html = '<div class="cal-panel-inner"><table><thead><tr>' +
-    '<th>Filename</th><th>Date</th><th>Exposure</th><th>Path</th>' +
+  const cbCol = WEB_MODE ? '<th class="fp-cb"><input type="checkbox" title="Select all" onchange="toggleFileCheckboxes(this)"></th>' : '';
+  const toolbar = WEB_MODE
+    ? '<div class="fp-toolbar"><label><input type="checkbox" onchange="toggleFileCheckboxes(this)"> Select all</label>' +
+      '<span class="fp-sel-count"></span>' +
+      '<button onclick="generateScript(this)" disabled>Download script</button></div>'
+    : '';
+
+  let html = '<div class="cal-panel-inner">' + toolbar + '<table><thead><tr>' +
+    cbCol + '<th>Filename</th><th>Date</th><th>Exposure</th><th>Path</th>' +
     '</tr></thead><tbody>';
   for (const f of files) {
     const exp = parseFloat(f.exptime);
@@ -1648,12 +1703,86 @@ function showCalFiles(el) {
     const pathCell = WEB_MODE
       ? '<td class="fp-path"><a href="' + esc(f.path) + '" download>' + esc(f.path) + '</a></td>'
       : '<td class="fp-path">' + esc(f.path) + '</td>';
-    html += '<tr><td>' + esc(f.filename) + '</td><td>' + esc(f.date) + '</td><td>' + expStr + '</td>' + pathCell + '</tr>';
+    const cb = WEB_MODE ? '<td class="fp-cb"><input type="checkbox" data-url="' + esc(f.path) + '" onchange="updateSelCount(this)"></td>' : '';
+    html += '<tr>' + cb + '<td>' + esc(f.filename) + '</td><td>' + esc(f.date) + '</td><td>' + expStr + '</td>' + pathCell + '</tr>';
   }
   html += '</tbody></table></div>';
   td.innerHTML = html;
   panel.appendChild(td);
   row.after(panel);
+}
+
+function toggleFileCheckboxes(src) {
+  const panel = src.closest('.file-panel-inner, .cal-panel-inner');
+  if (!panel) return;
+  const checked = src.checked;
+  // Sync all checkboxes (header th, toolbar label, and row checkboxes)
+  panel.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = checked);
+  updateSelCount(src);
+}
+
+function updateSelCount(el) {
+  const panel = el.closest('.file-panel-inner, .cal-panel-inner');
+  if (!panel) return;
+  const boxes = panel.querySelectorAll('tbody input[type="checkbox"]');
+  const checked = panel.querySelectorAll('tbody input[type="checkbox"]:checked');
+  const n = checked.length;
+  const countEl = panel.querySelector('.fp-sel-count');
+  if (countEl) countEl.textContent = n > 0 ? n + ' of ' + boxes.length + ' selected' : '';
+  const btn = panel.querySelector('.fp-toolbar button');
+  if (btn) btn.disabled = (n === 0);
+  // Sync select-all checkboxes
+  const allChecked = n === boxes.length && n > 0;
+  panel.querySelectorAll('.fp-toolbar input[type="checkbox"], thead .fp-cb input[type="checkbox"]')
+    .forEach(cb => cb.checked = allChecked);
+}
+
+function generateScript(btn) {
+  const panel = btn.closest('.file-panel-inner, .cal-panel-inner');
+  if (!panel) return;
+  const urls = [];
+  panel.querySelectorAll('tbody input[type="checkbox"]:checked').forEach(cb => {
+    const url = cb.getAttribute('data-url');
+    if (url) urls.push(url);
+  });
+  if (urls.length === 0) return;
+
+  const script = '#!/bin/bash\\n# Download ' + urls.length + ' file' + (urls.length > 1 ? 's' : '') +
+    ' from OHP archive\\n# Generated by ohp-m2-archive\\n\\n' +
+    urls.map(u => 'wget -nc "' + u + '"').join('\\n') + '\\n';
+
+  // Show modal
+  const overlay = document.createElement('div');
+  overlay.className = 'dl-modal-overlay';
+  overlay.innerHTML =
+    '<div class="dl-modal">' +
+    '<h3>Download script (' + urls.length + ' file' + (urls.length > 1 ? 's' : '') + ')</h3>' +
+    '<textarea readonly>' + script.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</textarea>' +
+    '<div class="dl-actions">' +
+    '<button class="dl-close" onclick="this.closest(\\'.dl-modal-overlay\\').remove()">Close</button>' +
+    '<button onclick="copyScript(this)">Copy to clipboard</button>' +
+    '<button onclick="saveScript(this)">Save as .sh</button>' +
+    '</div></div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+function copyScript(btn) {
+  const ta = btn.closest('.dl-modal').querySelector('textarea');
+  navigator.clipboard.writeText(ta.value).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy to clipboard', 1500);
+  });
+}
+
+function saveScript(btn) {
+  const ta = btn.closest('.dl-modal').querySelector('textarea');
+  const blob = new Blob([ta.value], {type: 'text/x-shellscript'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'download_ohp.sh';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function esc(s) {
@@ -1695,21 +1824,30 @@ def main():
     web_data = copy.deepcopy(data)
     web_data["archive_root"] = WEB_BASE_URL
     archive_prefix = str(ARCHIVE_ROOT) + "/"
+
+    def _to_web_url(local_path):
+        """Convert local archive path to remote URL, applying run name fixes."""
+        if not local_path.startswith(archive_prefix):
+            return local_path
+        rel = local_path[len(archive_prefix):]
+        for local_name, remote_name in RUN_NAME_MAP.items():
+            if rel.startswith(local_name + "/") or rel == local_name:
+                rel = remote_name + rel[len(local_name):]
+                break
+        return WEB_BASE_URL + rel
+
     for obj, files in web_data.get("file_index", {}).items():
         for f in files:
-            if f["path"].startswith(archive_prefix):
-                f["path"] = WEB_BASE_URL + f["path"][len(archive_prefix):]
+            f["path"] = _to_web_url(f["path"])
     for year_ci in web_data.get("cal_index", {}).values():
         for tel_ci in year_ci.values():
             for bin_ci in tel_ci.values():
                 for cal_type in ("bias", "dark"):
                     for f in bin_ci.get(cal_type, []):
-                        if f["path"].startswith(archive_prefix):
-                            f["path"] = WEB_BASE_URL + f["path"][len(archive_prefix):]
+                        f["path"] = _to_web_url(f["path"])
                 for filt_files in bin_ci.get("flat", {}).values():
                     for f in filt_files:
-                        if f["path"].startswith(archive_prefix):
-                            f["path"] = WEB_BASE_URL + f["path"][len(archive_prefix):]
+                        f["path"] = _to_web_url(f["path"])
     generate_html(web_data, web_mode=True)
 
     # 7. Copy web HTML to docs/ for GitHub Pages
