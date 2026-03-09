@@ -219,6 +219,27 @@ def cmd_status(args):
     print()
 
 
+def cmd_inventory(args):
+    from .stacking import build_target_inventory, print_inventory
+
+    telescopes = [args.telescope] if args.telescope else list(config.TELESCOPES)
+    years = [int(y) for y in args.year.split(",")] if args.year else None
+    inventory = build_target_inventory(years=years, telescopes=telescopes)
+    print_inventory(inventory)
+
+
+def cmd_stack(args):
+    from .stacking import run_stacking
+
+    years = [int(y) for y in args.year.split(",")] if args.year else None
+    run_stacking(
+        target=args.target,
+        years=years,
+        telescope=args.telescope,
+        force=args.force,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="pipeline",
@@ -293,6 +314,21 @@ def main():
     p_psf.add_argument("--force", action="store_true",
                         help="Reprocess even if PSF models exist")
 
+    # ── inventory ────────────────────────────────────────────────────
+    p_inv = sub.add_parser("inventory",
+                           help="List stackable targets across all years")
+    p_inv.add_argument("--year", help="Comma-separated years (default: all)")
+    p_inv.add_argument("--telescope", choices=list(config.TELESCOPES))
+
+    # ── stack ────────────────────────────────────────────────────────
+    p_stack = sub.add_parser("stack",
+                             help="Coadd images with SWarp (align + flux-scale)")
+    p_stack.add_argument("--target", help="Stack single target (canonical name)")
+    p_stack.add_argument("--year", help="Comma-separated years (default: all)")
+    p_stack.add_argument("--telescope", choices=list(config.TELESCOPES))
+    p_stack.add_argument("--force", action="store_true",
+                         help="Re-stack even if output exists")
+
     # ── all ───────────────────────────────────────────────────────────
     p_all = sub.add_parser("all", help="Run full pipeline")
     p_all.add_argument("--year", required=True)
@@ -324,6 +360,10 @@ def main():
         cmd_photometry(args)
     elif args.command == "psf":
         cmd_psf(args)
+    elif args.command == "inventory":
+        cmd_inventory(args)
+    elif args.command == "stack":
+        cmd_stack(args)
 
 
 if __name__ == "__main__":
