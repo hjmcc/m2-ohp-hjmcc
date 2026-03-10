@@ -427,7 +427,7 @@ def _run_scamp(ldac_paths, telescope, workdir):
     return n_heads > 0
 
 
-def _reject_spatial_outliers(frames, max_offset_deg=2.0):
+def _reject_spatial_outliers(frames, max_offset_deg=0.5):
     """Reject frames whose CRVAL is far from the median position.
 
     Catches mis-identified targets (e.g. Simbad resolving to wrong object).
