@@ -9,10 +9,10 @@ The .head files are saved alongside the reduced FITS frames and can be
 read directly by SWarp for stacking.
 
 Usage:
-    python run_scamp.py                      # all years, T120
-    python run_scamp.py --years 2025         # single year
-    python run_scamp.py --target M67         # single target
-    python run_scamp.py --dry-run            # show inventory only
+    python scripts/run_scamp.py                      # all years, T120
+    python scripts/run_scamp.py --years 2025         # single year
+    python scripts/run_scamp.py --target M67         # single target
+    python scripts/run_scamp.py --dry-run            # show inventory only
 """
 
 import argparse
@@ -29,7 +29,7 @@ import numpy as np
 from astropy.io import fits
 
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pipeline import config
 from pipeline.stacking import (
     build_target_inventory, normalise_target, _normalise_filter,

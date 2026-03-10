@@ -60,14 +60,13 @@ The archive spans 8 years (2018&ndash;2025) with ~2900 reduced T120 science fram
 
 Raw filter names (~50 variants) are normalised to 33 canonical filters. The broadband filters used for photometric calibration against Pan-STARRS1 are:
 
-| Canonical filter | PS1 band |
-|------------------|----------|
-| g | gmag |
-| r | rmag |
-| R | rmag |
-| i | imag |
-| V | gmag |
-| B | gmag |
+| Canonical filter | PS1 band | Raw variants |
+|------------------|----------|--------------|
+| g | gmag | g, G, g_Gunn, g Gunn, g' |
+| R | rmag | R, r, R Cousins, R_Cousins, r_Gunn, r Gunn, r' |
+| i | imag | i, I, i_Gunn, i Gunn, i' |
+| V | gmag | V, V Cousins, V_Cousins, v_Gunn, v Gunn |
+| B | gmag | B, B Cousins, B_Cousins |
 
 Narrowband filters (H&alpha;, [O III], [S II]) and U-band have no PS1 counterpart and are stacked without photometric validation.
 
@@ -395,9 +394,9 @@ Frames with $|\det(\mathbf{CD})|$ deviating by more than a factor of 10 from thi
 **Report:** `scamp_report.json` in the project root, containing per-group status, number of `.head` files produced, and external RMS values.
 
 
-## 3. Image Stacking (`stack_all.py`)
+## 3. Image Stacking (`scripts/stack_all.py`)
 
-**Command:** `python stack_all.py [--target TARGET] [--force] [--dry-run]`
+**Command:** `python scripts/stack_all.py [--target TARGET] [--force] [--dry-run]`
 
 The stacking script produces deep, pixel-aligned, photometrically calibrated coadded images from all T120 data (2018&ndash;2025) using SWarp. All stacks are placed on a common zero point of ZP = 30.0.
 
@@ -502,7 +501,7 @@ Stacks are written to `$OHP_DATA_ROOT/stacks/{group}/T120/`:
 - `{group}_{filter}.fits` &mdash; coadded image.
 - `{group}_{filter}.weight.fits` &mdash; combined weight map.
 
-The current dataset produces **131 stacks** across **40 target groups** in 9 filter bands (B, V, R, g, r, i, H&alpha;, [O III], [S II]).
+The current dataset produces **131 stacks** across **40 target groups** in 8 filter bands (B, V, R, g, i, H&alpha;, [O III], [S II]). Note that all r-band variants (r, r_Gunn, R, R_Cousins) are merged into a single canonical filter &ldquo;R&rdquo; and calibrated against PS1 rmag.
 
 
 ### 3.9 Per-stack PSF extraction (`scripts/extract_stack_psfs.py`)
@@ -520,9 +519,9 @@ The PSF header contains `FWHM_PX`, `FWHM_AS`, `EE50_AS`, `EE80_AS`, `ELLIPT`, `N
 **Report:** `stacks/stack_psf_report.json` with per-stack PSF statistics.
 
 
-## 4. Photometric Validation (`check_phot.py`)
+## 4. Photometric Validation (`scripts/check_phot.py`)
 
-**Command:** `python check_phot.py [--fix] [--plot] [--target TARGET]`
+**Command:** `python scripts/check_phot.py [--fix] [--plot] [--target TARGET]`
 
 Validates the photometric calibration of all stacks by independently measuring zero points against Pan-STARRS1 DR2, using exactly the same methodology as the pipeline's per-frame photometry.
 
@@ -549,11 +548,11 @@ To confirm that the validation and pipeline measurements are consistent, the met
 
 ### 4.2 Validation results
 
-Of 131 total stacks, 117 broadband stacks were validated (13 narrowband and 3 M64 stacks with too few PS1 matches were excluded):
+Of 131 total stacks, 117 broadband stacks were validated (narrowband and stacks with too few PS1 matches excluded):
 
 | Metric | Value |
 |--------|-------|
-| Median ZP offset | +0.001 mag |
+| Median ZP offset | &minus;0.001 mag |
 | Standard deviation | 0.20 mag |
 | Median RMS (per stack) | 0.82 mag |
 | Range | &minus;0.39 to +1.65 mag |
@@ -624,18 +623,18 @@ python -m pipeline photometry  --year 2025 --telescope T120
 python -m pipeline psf         --year 2025 --telescope T120
 
 # Stack all targets
-python stack_all.py
+python scripts/stack_all.py
 
 # Stack one target
-python stack_all.py --target M67
+python scripts/stack_all.py --target M67
 
 # Validate photometry of stacks
-python check_phot.py --plot
+python scripts/check_phot.py --plot
 
 # Apply photometric corrections if needed
-python check_phot.py --fix
+python scripts/check_phot.py --fix
 
 # Re-process with --force to overwrite existing results
 python -m pipeline photometry --year 2025 --telescope T120 --force
-python stack_all.py --force
+python scripts/stack_all.py --force
 ```

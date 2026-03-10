@@ -12,10 +12,10 @@ With --fix: apply a multiplicative correction so the stack's ZP becomes
 exactly 30.0. Pixel data *= 10^(0.4 * offset), weight /= factor^2.
 
 Usage:
-    python check_phot.py                    # report only
-    python check_phot.py --fix              # report + apply corrections
-    python check_phot.py --target M67       # single target
-    python check_phot.py --plot             # save diagnostic plots
+    python scripts/check_phot.py                    # report only
+    python scripts/check_phot.py --fix              # report + apply corrections
+    python scripts/check_phot.py --target M67       # single target
+    python scripts/check_phot.py --plot             # save diagnostic plots
 """
 
 import argparse
@@ -31,7 +31,7 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pipeline import config
 from pipeline.photometry import query_ps1, compute_zeropoint

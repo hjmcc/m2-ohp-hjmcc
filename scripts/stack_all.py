@@ -7,10 +7,10 @@ across ALL filters, then forces SWarp to use the same center/size/pixel_scale
 for every filter — guaranteeing pixel-aligned multi-band stacks.
 
 Usage:
-    python stack_all.py                    # stack everything
-    python stack_all.py --target Coma      # one merged group
-    python stack_all.py --dry-run          # just list what would be done
-    python stack_all.py --force            # re-stack even if output exists
+    python scripts/stack_all.py                    # stack everything
+    python scripts/stack_all.py --target Coma      # one merged group
+    python scripts/stack_all.py --dry-run          # just list what would be done
+    python scripts/stack_all.py --force            # re-stack even if output exists
 """
 
 import argparse
@@ -31,7 +31,7 @@ from astropy.wcs import WCS
 
 # ── Pipeline imports ────────────────────────────────────────────────────
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pipeline import config
 from pipeline.stacking import (

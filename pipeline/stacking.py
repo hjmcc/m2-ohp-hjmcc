@@ -170,20 +170,18 @@ def normalise_target(obj_name):
 def _normalise_filter(filt):
     """Normalise filter names so R/r and similar variants group together."""
     mapping = {
-        "R": "R", "r": "r", "r'": "r",
-        "R Cousins": "R", "R_Cousins": "R",
+        "R": "R", "r": "R", "r'": "R",
+        "R Cousins": "R", "R_Cousins": "R", "R_cousins": "R",
+        "r_Gunn": "R", "r Gunn": "R",
         "G": "g", "g": "g", "g'": "g",
         "g_Gunn": "g", "g Gunn": "g",
-        "r_Gunn": "r", "r Gunn": "r",
         "v_Gunn": "V", "v Gunn": "V",
         "i_Gunn": "i", "i Gunn": "i",
-        "B": "B", "B Cousins": "B", "B_Cousins": "B",
-        "V": "V", "V Cousins": "V", "V_Cousins": "V",
+        "B": "B", "B Cousins": "B", "B_Cousins": "B", "B_cousins": "B",
+        "V": "V", "V Cousins": "V", "V_Cousins": "V", "V_cousins": "V",
         "I": "I", "i": "i", "i'": "i",
         "H alpha OHP": "Ha", "H_alpha": "Ha", "Halpha": "Ha", "Ha": "Ha",
         "Halpha_OHP": "Ha",
-        "B_cousins": "B", "V_cousins": "V", "R_cousins": "R",
-        "r_Gunn": "r", "g_Gunn": "g", "v_Gunn": "V", "i_Gunn": "i",
     }
     return mapping.get(filt, filt)
 

@@ -2,9 +2,9 @@
 """Re-solve all T120 2025 frames with astrometry.net solve-field, then re-run photometry.
 
 Usage:
-    python resolve_t120.py                # solve astrometry + photometry
-    python resolve_t120.py --astrom-only  # solve astrometry only
-    python resolve_t120.py --phot-only    # photometry only (assumes WCS already solved)
+    python scripts/resolve_t120.py                # solve astrometry + photometry
+    python scripts/resolve_t120.py --astrom-only  # solve astrometry only
+    python scripts/resolve_t120.py --phot-only    # photometry only (assumes WCS already solved)
 """
 
 import json
@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pipeline import config
 
 YEAR = "2025"

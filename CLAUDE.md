@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Astronomical imaging data archive and reduction pipeline for the OHP (Observatoire de Haute-Provence) M2 student observing programme. Three main components:
 
 - **`pipeline/`** — Python package for CCD reduction, astrometry, photometry, and PSF extraction
-- **`stack_all.py`** / **`check_phot.py`** — Batch SWarp stacking with shared WCS grids and photometric validation
+- **`scripts/stack_all.py`** / **`scripts/check_phot.py`** — Batch SCAMP + SWarp stacking with shared WCS grids and photometric validation
 - **`ohp-archive/`** — Standalone archive scanner (pure stdlib, no astropy) that indexes 8 years of FITS data and generates HTML dashboards
 
 Full pipeline documentation: `docs/pipeline_description.md`
@@ -25,21 +25,21 @@ pipeline/              # Python package — per-frame reduction pipeline
   astrometry.py        # WCS via solve-field + Gaia DR3 validation
   photometry.py        # Aperture photometry + PS1 DR2 zero points
   psf.py               # SExtractor + PSFex PSF modelling
-  stacking.py          # Target inventory, SCAMP-based stacking (legacy)
+  stacking.py          # Target inventory, filter normalisation, shared utilities
   __main__.py          # CLI entry point
-stack_all.py           # Batch SWarp stacking — shared WCS grids, ZP=30
-check_phot.py          # Photometric validation of stacks vs PS1
 ohp-archive/           # Pure-stdlib archive scanner for telescope use
-scripts/               # One-off utility scripts
-  process_all.sh       # Batch reprocessing shell script
+scripts/               # Stacking pipeline and utility scripts
+  stack_all.py         # Batch SWarp stacking — shared WCS grids, ZP=30
+  check_phot.py        # Photometric validation of stacks vs PS1
+  run_scamp.py         # SCAMP astrometric refinement
+  extract_stack_psfs.py # Per-stack PSF extraction
   make_phot_plots.py   # Photometry diagnostic plots
   resolve_t120.py      # T120 coordinate resolution
-  run_scamp.py         # Manual SCAMP runs
+  process_all.sh       # Batch reprocessing shell script
 docs/                  # Documentation and GitHub Pages
   pipeline_description.md  # Complete pipeline description
 calibrations/          # Reference PSF models (T080, T120)
 notebooks/             # Jupyter analysis notebooks
-data/                  # Pipeline results summaries
 ```
 
 ## Commands
@@ -66,13 +66,13 @@ python -m pipeline status --year 2025
 python -m pipeline photometry --year 2025 --telescope T120 --force
 
 # Batch stacking (all targets, shared WCS grids, ZP=30)
-python stack_all.py
-python stack_all.py --target M67
-python stack_all.py --dry-run
+python scripts/stack_all.py
+python scripts/stack_all.py --target M67
+python scripts/stack_all.py --dry-run
 
 # Validate stack photometry against PS1
-python check_phot.py --plot
-python check_phot.py --fix         # apply corrections
+python scripts/check_phot.py --plot
+python scripts/check_phot.py --fix         # apply corrections
 
 # Archive scanner (standalone, no astropy needed)
 cd ohp-archive && python3 scan_archive.py
@@ -99,7 +99,7 @@ External tools: **solve-field** (on PATH), **SExtractor** (`sex` on PATH), **PSF
 5. **photometry.py** — Aperture photometry (`r = 3 × FWHM`) + PS1 DR2 cross-match → `PHOTZP` in headers (counts/sec convention: `m = -2.5 log10(flux/exptime) + ZP`)
 6. **psf.py** — SExtractor LDAC → PSFex for per-frame PSF models with degree-2 spatial variation
 
-### Stacking (stack_all.py)
+### Stacking (scripts/stack_all.py)
 
 - Processes all T120 targets (2018–2025) with SWarp
 - Shared WCS grid per target group: all filters pixel-aligned for multi-band photometry

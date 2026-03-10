@@ -20,7 +20,7 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pipeline import config
 
 YEAR = "2025"
