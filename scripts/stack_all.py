@@ -451,9 +451,9 @@ def stack_target_group(group_name, targets, inventory, output_base, force=False,
         log.info("  %s: no frames with .head files", group_name)
         return {}
 
-    # Reject spatial outliers: tight for single targets (10' ≈ 1.5 FOV),
-    # generous for merged groups (30' allows for constituent target separation)
-    max_offset = 0.5 if len(targets) > 1 else 10.0 / 60.0
+    # Reject spatial outliers: tight for single targets (4' ≈ FOV/3,
+    # ensures >70% overlap), generous for merged groups (30')
+    max_offset = 0.5 if len(targets) > 1 else 4.0 / 60.0
     frame_infos = _reject_spatial_outliers(frame_infos, max_offset_deg=max_offset)
     if len(frame_infos) < 2:
         log.info("  %s: too few frames after spatial filtering (%d)",

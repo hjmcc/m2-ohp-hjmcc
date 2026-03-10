@@ -421,7 +421,7 @@ For each target group:
 
 1. **Require `.head` files**: only frames with SCAMP astrometric solutions (`.head` external header files) are included.
 2. **Spatial outlier rejection**: frames whose `CRVAL` position is far from the group median are rejected. The threshold depends on the group type:
-   - **Single targets**: 10&prime; (~1.5 T120 FOVs). This catches bad pointings (e.g., mislabelled `OBJECT` headers, slewing errors) while keeping frames with slight dithering offsets that still partially overlap.
+   - **Single targets**: 4&prime; (~FOV/3, ensuring &gt;70% overlap). This restricts each stack to a single consistent pointing, rejecting frames from different pointings (e.g., mislabelled `OBJECT` headers, different-year re-pointings, slewing errors).
    - **Merged groups**: 30&prime; (0.5&deg;), to accommodate the spatial separation between constituent targets.
 3. **CD matrix validation**: the `.head` file's CD matrix determinant is checked against the expected value of `(0.770/3600)^2`. Files with `|det(CD)|` deviating by more than a factor of 10 from expected are rejected (catches corrupt SCAMP solutions).
 4. **Per-filter ZP outlier rejection**: within each filter group, frames whose PHOTZP is more than 2.0&sigma; (MAD-based) from the filter median are rejected.

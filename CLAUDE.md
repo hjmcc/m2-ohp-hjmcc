@@ -104,7 +104,7 @@ External tools: **solve-field** (on PATH), **SExtractor** (`sex` on PATH), **PSF
 - Processes all T120 targets (2018–2025) with SWarp
 - Shared WCS grid per target group: all filters pixel-aligned for multi-band photometry
 - Merged groups: Coma (Abell1656+border+NGC4874), M105_group, M38_group, Markarian (M84+M86)
-- Spatial outlier rejection: 10' for single targets (~1.5 FOVs), 30' for merged groups — catches mislabelled OBJECT headers and bad pointings
+- Spatial outlier rejection: 4' for single targets (FOV/3, >70% overlap), 30' for merged groups — restricts to single consistent pointing
 - ZP outlier rejection: 2σ MAD-clipped per filter — catches cloudy frames
 - Flux scaling to ZP=30: `FLXSCALE = 10^(0.4*(30 - ZP)) / exptime` written into `.head` files
 - Weight maps from normalised master flat-fields
