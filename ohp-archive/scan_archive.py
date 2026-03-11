@@ -433,9 +433,10 @@ def scan_file(filepath):
     if telescope == "T152" and imagetyp != "science":
         obj_raw = ""
         object_clean = ""
-    # For flats masquerading as science, clear the object name
-    if imagetyp == "flat" and imagetyp_raw.lower().strip() in ("light frame", "light", "object", ""):
-        object_clean = ""  # don't count "FlatDome" as a science target
+    # For calibration frames, clear the object name so they don't pollute
+    # science target lists (e.g. flats with OBJECT='M49' in the header)
+    if imagetyp in ("flat", "bias", "dark"):
+        object_clean = ""
 
     # Filter
     filter_raw = headers.get("FILTER", "")
